@@ -3,6 +3,7 @@ import 'package:expense_tracker/screens/dashboard_screen.dart';
 import 'package:expense_tracker/screens/budgets_screen.dart';
 import 'package:expense_tracker/screens/reports_screen.dart';
 import 'package:expense_tracker/screens/accounts_screen.dart';
+import 'package:expense_tracker/screens/loans_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,6 +21,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     ReportsScreen(),
     BudgetsScreen(),
     AccountsScreen(),
+    LoansScreen(),
   ];
 
   @override
@@ -79,6 +81,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           BottomNavigationBarItem(
             icon: Icon(Icons.account_balance_wallet),
             label: 'Accounts',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.account_circle),
+            label: 'Loans',
           ),
         ],
         currentIndex: _selectedIndex,

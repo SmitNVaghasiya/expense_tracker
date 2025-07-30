@@ -10,7 +10,7 @@ class CalculatorTransactionScreen extends StatefulWidget {
   final DateTime? initialDate;
 
   const CalculatorTransactionScreen({
-    super.key, 
+    super.key,
     required this.initialType,
     this.initialDate,
   });
@@ -330,7 +330,10 @@ class _CalculatorTransactionScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
         leading: TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(
@@ -360,15 +363,11 @@ class _CalculatorTransactionScreenState
         children: [
           // Transaction type selector
           Container(
-            margin: const EdgeInsets.all(16),
+            margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Theme.of(
-                  context,
-                ).colorScheme.outline.withValues(alpha: 0.2),
-              ),
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Theme.of(context).dividerColor),
             ),
             child: Row(
               children: [
@@ -381,12 +380,12 @@ class _CalculatorTransactionScreenState
                       });
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
                       decoration: BoxDecoration(
                         color: _selectedType == 'income'
                             ? Theme.of(context).colorScheme.primary
                             : null,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         'INCOME',
@@ -396,6 +395,7 @@ class _CalculatorTransactionScreenState
                               ? Colors.white
                               : Theme.of(context).colorScheme.onSurface,
                           fontWeight: FontWeight.bold,
+                          fontSize: 14,
                         ),
                       ),
                     ),
@@ -410,12 +410,12 @@ class _CalculatorTransactionScreenState
                       });
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
                       decoration: BoxDecoration(
                         color: _selectedType == 'expense'
                             ? Theme.of(context).colorScheme.primary
                             : null,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         'EXPENSE',
@@ -425,6 +425,7 @@ class _CalculatorTransactionScreenState
                               ? Colors.white
                               : Theme.of(context).colorScheme.onSurface,
                           fontWeight: FontWeight.bold,
+                          fontSize: 14,
                         ),
                       ),
                     ),
@@ -439,12 +440,12 @@ class _CalculatorTransactionScreenState
                       });
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
                       decoration: BoxDecoration(
                         color: _selectedType == 'transfer'
                             ? Theme.of(context).colorScheme.primary
                             : null,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         'TRANSFER',
@@ -454,6 +455,7 @@ class _CalculatorTransactionScreenState
                               ? Colors.white
                               : Theme.of(context).colorScheme.onSurface,
                           fontWeight: FontWeight.bold,
+                          fontSize: 14,
                         ),
                       ),
                     ),
@@ -465,7 +467,7 @@ class _CalculatorTransactionScreenState
 
           // Account and Category selection
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
               children: [
                 Expanded(
@@ -480,7 +482,7 @@ class _CalculatorTransactionScreenState
                     () => _showAccountSelector(),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 if (_selectedType == 'transfer')
                   Expanded(
                     child: _buildSelectionButton(
@@ -507,46 +509,39 @@ class _CalculatorTransactionScreenState
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
           // Notes field
           Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Theme.of(
-                  context,
-                ).colorScheme.outline.withValues(alpha: 0.2),
-              ),
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Theme.of(context).dividerColor),
             ),
             child: TextField(
               controller: _notesController,
               decoration: const InputDecoration(
                 hintText: 'Add notes',
                 border: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
               ),
-              maxLines: 3,
+              maxLines: 2,
               minLines: 1,
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
           // Amount display
           Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.all(20),
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Theme.of(
-                  context,
-                ).colorScheme.outline.withValues(alpha: 0.2),
-              ),
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Theme.of(context).dividerColor),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -554,74 +549,78 @@ class _CalculatorTransactionScreenState
                 Text(
                   '₹$_displayAmount',
                   style: const TextStyle(
-                    fontSize: 32,
+                    fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 IconButton(
                   onPressed: _onBackspacePressed,
                   icon: const Icon(Icons.backspace_outlined),
+                  iconSize: 20,
+                  padding: EdgeInsets.zero,
                 ),
               ],
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
           // Calculator
           Expanded(
             child: Container(
-              margin: const EdgeInsets.all(16),
+              margin: const EdgeInsets.all(4),
               child: _buildCalculator(),
             ),
           ),
 
           // Date and Time
           Container(
-            margin: const EdgeInsets.all(16),
+            margin: const EdgeInsets.all(8),
             child: Row(
               children: [
                 Expanded(
                   child: GestureDetector(
                     onTap: _selectDate,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      padding: const EdgeInsets.symmetric(vertical: 6),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
-                        borderRadius: BorderRadius.circular(8),
+                        color: Theme.of(context).cardColor,
+                        borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.outline.withValues(alpha: 0.2),
+                          color: Theme.of(context).dividerColor,
                         ),
                       ),
                       child: Text(
                         DateFormat('MMM dd, yyyy').format(_selectedDate),
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   ),
                 ),
-                const Text('|'),
+                const Text('|', style: TextStyle(fontSize: 14)),
                 Expanded(
                   child: GestureDetector(
                     onTap: _selectTime,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      padding: const EdgeInsets.symmetric(vertical: 6),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
-                        borderRadius: BorderRadius.circular(8),
+                        color: Theme.of(context).cardColor,
+                        borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.outline.withValues(alpha: 0.2),
+                          color: Theme.of(context).dividerColor,
                         ),
                       ),
                       child: Text(
                         _selectedTime.format(context),
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   ),
@@ -643,26 +642,25 @@ class _CalculatorTransactionScreenState
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-          ),
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Theme.of(context).dividerColor),
         ),
         child: Row(
           children: [
-            Icon(icon, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(width: 8),
+            Icon(icon, color: Theme.of(context).colorScheme.primary, size: 18),
+            const SizedBox(width: 6),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
                     title,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 10,
                       color: Theme.of(
                         context,
                       ).colorScheme.onSurface.withValues(alpha: 0.6),
@@ -670,7 +668,11 @@ class _CalculatorTransactionScreenState
                   ),
                   Text(
                     value,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -684,8 +686,8 @@ class _CalculatorTransactionScreenState
   Widget _buildCalculator() {
     return GridView.count(
       crossAxisCount: 4,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
+      crossAxisSpacing: 8,
+      mainAxisSpacing: 8,
       children: [
         _buildCalculatorButton(
           '+',
@@ -738,16 +740,19 @@ class _CalculatorTransactionScreenState
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
-        backgroundColor: color ?? Theme.of(context).colorScheme.surface,
+        backgroundColor: color ?? Theme.of(context).cardColor,
         foregroundColor: color != null
             ? Colors.white
             : Theme.of(context).colorScheme.onSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         elevation: 0,
+        padding: const EdgeInsets.all(5),
+        minimumSize: const Size(0, 0),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
       child: Text(
         text,
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -755,6 +760,7 @@ class _CalculatorTransactionScreenState
   void _showAccountSelector() {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Theme.of(context).cardColor,
       builder: (context) => Container(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -800,6 +806,7 @@ class _CalculatorTransactionScreenState
   void _showToAccountSelector() {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Theme.of(context).cardColor,
       builder: (context) => Container(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -849,6 +856,7 @@ class _CalculatorTransactionScreenState
 
     showModalBottomSheet(
       context: context,
+      backgroundColor: Theme.of(context).cardColor,
       builder: (context) => Container(
         padding: const EdgeInsets.all(16),
         child: Column(

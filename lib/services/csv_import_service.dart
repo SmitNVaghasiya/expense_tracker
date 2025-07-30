@@ -1,104 +1,53 @@
 import 'dart:io';
-import 'dart:convert';
-import 'package:csv/csv.dart';
 import 'package:expense_tracker/models/transaction.dart';
-import 'package:expense_tracker/services/data_service.dart';
-import 'package:uuid/uuid.dart';
-import 'package:flutter/foundation.dart';
 
-class CsvImportService {
-  static Future<void> importTransactionsFromCsv(String filePath) async {
+class CSVImportService {
+  static Future<List<Transaction>> importFromCSV(File file) async {
+    List<Transaction> transactions = [];
+    
     try {
-      // Read the CSV file
-      final input = File(filePath).openRead();
-      final fields = await input
-          .transform(utf8.decoder)
-          .transform(const CsvToListConverter())
-          .toList();
-
-      // Skip the header row if it exists
-      bool hasHeader = fields.isNotEmpty && 
-          (fields[0][0] == 'Date' || 
-           fields[0][0] == 'date' || 
-           fields[0][0] == 'Title' ||
-           fields[0][0] == 'title');
-
-      int startIndex = hasHeader ? 1 : 0;
-
-      // Process each row
-      List<Transaction> transactions = [];
-      for (int i = startIndex; i < fields.length; i++) {
-        final row = fields[i];
-        if (row.length >= 4) { // Ensure we have enough columns
+      String content = await file.readAsString();
+      List<String> lines = content.split('\n');
+      
+      // Skip header line
+      for (int i = 1; i < lines.length; i++) {
+        String line = lines[i].trim();
+        if (line.isEmpty) continue;
+        
+        List<String> columns = line.split(',');
+        if (columns.length >= 5) {
           try {
-            // Parse date (assuming format: DD/MM/YYYY or YYYY-MM-DD)
-            DateTime date;
-            if (row[0] is String) {
-              String dateString = row[0].toString().trim();
-              if (dateString.contains('/')) {
-                // DD/MM/YYYY format
-                List<String> parts = dateString.split('/');
-                date = DateTime(
-                  int.parse(parts[2]), 
-                  int.parse(parts[1]), 
-                  int.parse(parts[0])
-                );
-              } else if (dateString.contains('-')) {
-                // YYYY-MM-DD format
-                date = DateTime.parse(dateString);
-              } else {
-                // Try to parse as is
-                date = DateTime.parse(dateString);
-              }
-            } else {
-              date = DateTime.now(); // Default to now if parsing fails
+            DateTime date = DateTime.parse(columns[0]);
+            String type = columns[1].toLowerCase();
+            String category = columns[2];
+            double amount = double.parse(columns[3]);
+            String title = columns[4].replaceAll(';', ',');
+            
+            // Validate type
+            if (type != 'income' && type != 'expense') {
+              type = 'expense'; // Default to expense if invalid
             }
-
-            // Parse amount (assuming it's in column 3)
-            double amount = 0;
-            if (row[3] is String) {
-              // Remove currency symbols and commas
-              String amountString = row[3].toString().trim();
-              amountString = amountString.replaceAll(RegExp(r'[₹$,]'), '');
-              amount = double.tryParse(amountString) ?? 0;
-            } else if (row[3] is num) {
-              amount = (row[3] as num).toDouble();
-            }
-
-            // Determine type (expense or income) based on amount or column 4
-            String type = 'expense';
-            if (amount >= 0) {
-              type = 'income';
-            } else {
-              type = 'expense';
-              amount = amount.abs(); // Make amount positive for expenses
-            }
-
-            // Create transaction
-            final transaction = Transaction(
-              id: const Uuid().v4(),
-              title: (row[1] != null) ? row[1].toString().trim() : 'Imported Transaction',
+            
+            Transaction transaction = Transaction(
+              id: DateTime.now().millisecondsSinceEpoch.toString() + '_$i',
+              title: title,
               amount: amount,
               date: date,
-              category: (row[2] != null) ? row[2].toString().trim() : 'Other',
+              category: category,
               type: type,
             );
-
+            
             transactions.add(transaction);
           } catch (e) {
-            // Skip rows that can't be parsed
-            debugPrint('Error parsing row $i: $e');
+            // Skip invalid lines
+            print('Skipping invalid line $i: $e');
           }
         }
       }
-
-      // Save all transactions
-      for (var transaction in transactions) {
-        await DataService.addTransaction(transaction);
-      }
     } catch (e) {
-      debugPrint('Error importing CSV: $e');
-      rethrow;
+      throw Exception('Error reading CSV file: $e');
     }
+    
+    return transactions;
   }
 }

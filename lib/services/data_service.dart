@@ -16,9 +16,7 @@ class DataService {
     final prefs = await SharedPreferences.getInstance();
     final transactionsJson = prefs.getString(_transactionsKey) ?? '[]';
     final transactionsList = json.decode(transactionsJson) as List;
-    return transactionsList
-        .map((item) => Transaction.fromJson(item))
-        .toList();
+    return transactionsList.map((item) => Transaction.fromJson(item)).toList();
   }
 
   static Future<void> addTransaction(Transaction transaction) async {
@@ -29,8 +27,9 @@ class DataService {
 
   static Future<void> updateTransaction(Transaction transaction) async {
     final transactions = await getTransactions();
-    final index =
-        transactions.indexWhere((element) => element.id == transaction.id);
+    final index = transactions.indexWhere(
+      (element) => element.id == transaction.id,
+    );
     if (index != -1) {
       transactions[index] = transaction;
       await _saveTransactions(transactions);
@@ -163,22 +162,73 @@ class DataService {
   }
 
   // Helper method to update account balance when transaction is added
-  static Future<void> updateAccountBalance(String accountId, double amount, String transactionType) async {
+  static Future<void> updateAccountBalance(
+    String accountId,
+    double amount,
+    String transactionType,
+  ) async {
     final accounts = await getAccounts();
-    final accountIndex = accounts.indexWhere((account) => account.id == accountId);
-    
+    final accountIndex = accounts.indexWhere(
+      (account) => account.id == accountId,
+    );
+
     if (accountIndex != -1) {
       final account = accounts[accountIndex];
       double newBalance = account.balance;
-      
+
       if (transactionType == 'income') {
         newBalance += amount;
       } else if (transactionType == 'expense') {
         newBalance -= amount;
       }
-      
+
       accounts[accountIndex] = account.copyWith(balance: newBalance);
       await _saveAccounts(accounts);
     }
+  }
+
+  static Future<String> getAccountNameById(String accountId) async {
+    final accounts = await getAccounts();
+    final account = accounts.firstWhere(
+      (account) => account.id == accountId,
+      orElse: () => Account(
+        id: accountId,
+        name: 'Unknown Account',
+        balance: 0,
+        type: 'unknown',
+        createdAt: DateTime.now(),
+      ),
+    );
+    return account.name;
+  }
+
+  // Clear all data
+  static Future<void> clearAllData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_transactionsKey);
+    await prefs.remove(_budgetsKey);
+    await prefs.remove(_groupsKey);
+    await prefs.remove(_accountsKey);
+  }
+
+  // Clear specific data types
+  static Future<void> clearAllTransactions() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_transactionsKey);
+  }
+
+  static Future<void> clearAllBudgets() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_budgetsKey);
+  }
+
+  static Future<void> clearAllAccounts() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_accountsKey);
+  }
+
+  static Future<void> clearAllGroups() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_groupsKey);
   }
 }

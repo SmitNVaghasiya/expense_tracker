@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:expense_tracker/models/transaction.dart';
+import 'package:expense_tracker/models/loan.dart';
+import 'package:expense_tracker/models/account.dart';
 import 'package:expense_tracker/services/data_service.dart';
+import 'package:expense_tracker/services/loan_service.dart';
 import 'package:expense_tracker/screens/calculator_transaction_screen.dart';
+import 'package:expense_tracker/screens/custom_drawer.dart';
+import 'package:expense_tracker/services/currency_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
 enum TimePeriod { daily, weekly, monthly, threeMonths, sixMonths, yearly }
@@ -18,17 +24,21 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   List<Transaction> _allTransactions = [];
   List<Transaction> _filteredTransactions = [];
+  List<Loan> _loans = [];
+  List<Account> _accounts = [];
   TimePeriod _selectedPeriod = TimePeriod.daily;
   DateTime _selectedDate = DateTime.now();
   TransactionFilter _transactionFilter = TransactionFilter.all;
 
   bool _showTotal = true;
   bool _carryOver = true;
+  String _searchQuery = '';
+  bool _isSearchActive = false;
 
   double _totalExpenses = 0;
   double _totalIncome = 0;
   double _balance = 0;
-  Map<String, double> _categoryExpenses = {};
+  final Map<String, double> _categoryExpenses = {};
 
   @override
   void initState() {
@@ -38,9 +48,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadData() async {
     final transactions = await DataService.getTransactions();
+    final loans = await LoanService.getLoans();
+    final accounts = await DataService.getAccounts();
 
     setState(() {
       _allTransactions = transactions;
+      _loans = loans;
+      _accounts = accounts;
       _filterTransactionsByPeriod();
       _calculateTotals();
       _calculateCategoryExpenses();
@@ -90,6 +104,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       if (!isInPeriod) return false;
 
+      // Apply search filter
+      if (_searchQuery.isNotEmpty) {
+        final query = _searchQuery.toLowerCase();
+        final title = transaction.title.toLowerCase();
+        final category = transaction.category.toLowerCase();
+        final notes = transaction.notes?.toLowerCase() ?? '';
+
+        if (!title.contains(query) &&
+            !category.contains(query) &&
+            !notes.contains(query)) {
+          return false;
+        }
+      }
+
       switch (_transactionFilter) {
         case TransactionFilter.income:
           return transaction.type == 'income';
@@ -113,7 +141,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .where((t) => t.type == 'income' && _isTransactionInPeriod(t))
         .fold(0, (sum, item) => sum + item.amount);
 
+    // Calculate balance including loan impact
     _balance = _totalIncome - _totalExpenses;
+
+    // Add loan impact to balance
+    final loanImpact = _calculateLoanImpact();
+    _balance += loanImpact;
+  }
+
+  double _calculateLoanImpact() {
+    double impact = 0;
+
+    for (final loan in _loans) {
+      if (loan.status == 'pending') {
+        if (loan.type == 'lent') {
+          // Money lent reduces available balance
+          impact -= loan.remainingAmount;
+        } else {
+          // Money borrowed increases available balance
+          impact += loan.remainingAmount;
+        }
+      }
+    }
+
+    return impact;
   }
 
   bool _isTransactionInPeriod(Transaction transaction) {
@@ -166,10 +217,258 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  String _getAccountName(String? accountId) {
+    if (accountId == null) return 'Unknown';
+    final account = _accounts.firstWhere(
+      (account) => account.id == accountId,
+      orElse: () => Account(
+        id: accountId,
+        name: accountId,
+        balance: 0,
+        type: 'unknown',
+        createdAt: DateTime.now(),
+      ),
+    );
+    return account.name;
+  }
+
+  Widget _buildLoanSummarySection() {
+    final currencyProvider = Provider.of<CurrencyProvider>(
+      context,
+      listen: false,
+    );
+
+    // Calculate loan statistics
+    final pendingLoans = _loans
+        .where((loan) => loan.status == 'pending')
+        .toList();
+    final overdueLoans = _loans.where((loan) => loan.isOverdue).toList();
+    final nextPaymentDue = _loans
+        .where((loan) => loan.isNextPaymentDue)
+        .toList();
+
+    double totalLent = 0;
+    double totalBorrowed = 0;
+    double totalRemainingLent = 0;
+    double totalRemainingBorrowed = 0;
+
+    for (final loan in _loans) {
+      if (loan.type == 'lent') {
+        totalLent += loan.amount;
+        if (loan.status == 'pending') {
+          totalRemainingLent += loan.remainingAmount;
+        }
+      } else {
+        totalBorrowed += loan.amount;
+        if (loan.status == 'pending') {
+          totalRemainingBorrowed += loan.remainingAmount;
+        }
+      }
+    }
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.account_balance, color: Colors.blue),
+                const SizedBox(width: 8),
+                const Text(
+                  'Loan Summary',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                if (overdueLoans.isNotEmpty || nextPaymentDue.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${overdueLoans.length + nextPaymentDue.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Loan amounts
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Lent',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      ),
+                      Text(
+                        '${currencyProvider.currencySymbol}${totalLent.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                        ),
+                      ),
+                      if (totalRemainingLent > 0)
+                        Text(
+                          'Remaining: ${currencyProvider.currencySymbol}${totalRemainingLent.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Borrowed',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      ),
+                      Text(
+                        '${currencyProvider.currencySymbol}${totalBorrowed.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red,
+                        ),
+                      ),
+                      if (totalRemainingBorrowed > 0)
+                        Text(
+                          'Remaining: ${currencyProvider.currencySymbol}${totalRemainingBorrowed.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            if (overdueLoans.isNotEmpty || nextPaymentDue.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning, color: Colors.red, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        overdueLoans.isNotEmpty
+                            ? '${overdueLoans.length} overdue loan${overdueLoans.length > 1 ? 's' : ''}'
+                            : '${nextPaymentDue.length} payment${nextPaymentDue.length > 1 ? 's' : ''} due',
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSearchDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Theme.of(context).cardColor,
+          title: Text(
+            'Search Transactions',
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+          ),
+          content: TextField(
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: 'Search by title, category, or notes...',
+              hintStyle: TextStyle(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              filled: true,
+              fillColor: Theme.of(context).scaffoldBackgroundColor,
+            ),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            onChanged: (value) {
+              setState(() {
+                _searchQuery = value;
+                _filterTransactionsByPeriod();
+                _calculateTotals();
+                _calculateCategoryExpenses();
+              });
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _searchQuery = '';
+                  _filterTransactionsByPeriod();
+                  _calculateTotals();
+                  _calculateCategoryExpenses();
+                });
+                Navigator.of(context).pop();
+              },
+              child: Text(
+                'Clear',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Close',
+                style: TextStyle(color: Theme.of(context).colorScheme.primary),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      drawer: const CustomDrawer(),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadData,
@@ -185,6 +484,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Loan Summary Section
+                      if (_loans.isNotEmpty) ...[
+                        _buildLoanSummarySection(),
+                        const SizedBox(height: 16),
+                      ],
+
                       // Transaction filter pills
                       _buildTransactionFilterPills(),
 
@@ -348,9 +653,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Future<void> _showDatePicker() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+        _filterTransactionsByPeriod();
+        _calculateTotals();
+        _calculateCategoryExpenses();
+      });
+    }
+  }
+
   Widget _buildCleanHeader() {
     return Container(
-      color: Colors.white,
+      color: Theme.of(context).cardColor,
       padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
@@ -358,27 +680,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IconButton(
-                icon: const Icon(Icons.menu, color: Colors.black87),
-                onPressed: () {},
+              Builder(
+                builder: (context) => IconButton(
+                  icon: Icon(
+                    Icons.menu,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                  onPressed: () {
+                    Scaffold.of(context).openDrawer();
+                  },
+                ),
               ),
-              const Text(
+              Text(
                 'MyMoney',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   fontFamily: 'cursive',
-                  color: Colors.black87,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.search, color: Colors.black87),
-                    onPressed: () {},
+                    icon: Icon(
+                      Icons.search,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                    onPressed: _showSearchDialog,
                   ),
                   IconButton(
-                    icon: const Icon(Icons.filter_list, color: Colors.black87),
+                    icon: Icon(
+                      Icons.filter_list,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
                     onPressed: _showDisplayOptions,
                   ),
                 ],
@@ -396,12 +731,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 icon: const Icon(Icons.chevron_left, color: Colors.green),
                 onPressed: _navigateToPreviousPeriod,
               ),
-              Text(
-                _getDateRangeText(),
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.green,
+              GestureDetector(
+                onTap: _showDatePicker,
+                child: Text(
+                  _getDateRangeText(),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.green,
+                  ),
                 ),
               ),
               IconButton(
@@ -421,76 +759,85 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildSummaryRow() {
-    return Row(
+    final currencyProvider = Provider.of<CurrencyProvider>(
+      context,
+      listen: false,
+    );
+
+    return Column(
       children: [
-        Expanded(
-          child: Column(
-            children: [
-              const Text(
-                'EXPENSE',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey,
-                ),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                children: [
+                  const Text(
+                    'EXPENSE',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${currencyProvider.currencySymbol}${_totalExpenses.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                '₹${_totalExpenses.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.red,
-                ),
+            ),
+            Expanded(
+              child: Column(
+                children: [
+                  const Text(
+                    'INCOME',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${currencyProvider.currencySymbol}${_totalIncome.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: Column(
-            children: [
-              const Text(
-                'INCOME',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey,
-                ),
+            ),
+            Expanded(
+              child: Column(
+                children: [
+                  const Text(
+                    'BALANCE',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${currencyProvider.currencySymbol}${_balance.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: _balance >= 0 ? Colors.green : Colors.red,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                '₹${_totalIncome.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: Column(
-            children: [
-              const Text(
-                'BALANCE',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '₹${_balance.toStringAsFixed(2)}',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: _balance >= 0 ? Colors.green : Colors.red,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ],
     );
@@ -532,8 +879,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blue : Colors.grey[200],
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).dividerColor,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -541,13 +895,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Icon(
               icon,
               size: 16,
-              color: isSelected ? Colors.white : Colors.black87,
+              color: isSelected
+                  ? Colors.white
+                  : Theme.of(context).colorScheme.onSurface,
             ),
             const SizedBox(width: 4),
             Text(
               label,
               style: TextStyle(
-                color: isSelected ? Colors.white : Colors.black87,
+                color: isSelected
+                    ? Colors.white
+                    : Theme.of(context).colorScheme.onSurface,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
@@ -564,7 +922,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           padding: const EdgeInsets.all(32.0),
           child: Text(
             'No transactions in this period',
-            style: TextStyle(color: Colors.grey[600], fontSize: 16),
+            style: TextStyle(
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.6),
+              fontSize: 16,
+            ),
           ),
         ),
       );
@@ -590,10 +953,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.symmetric(vertical: 8.0),
               child: Text(
                 entry.key,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: Colors.black87,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
             ),
@@ -610,6 +973,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildTransactionItem(Transaction transaction) {
     final isIncome = transaction.type == 'income';
+    final currencyProvider = Provider.of<CurrencyProvider>(
+      context,
+      listen: false,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -670,7 +1037,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      transaction.accountId ?? 'Unknown',
+                      _getAccountName(transaction.accountId),
                       style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                   ],
@@ -681,7 +1048,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           // Amount
           Text(
-            '${isIncome ? '+' : '-'}₹${transaction.amount.toStringAsFixed(2)}',
+            '${isIncome ? '+' : '-'}${currencyProvider.currencySymbol}${transaction.amount.toStringAsFixed(2)}',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
