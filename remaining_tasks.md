@@ -1,0 +1,2 @@
+-- in budget i can add monthly options as they might need to change the budget ratio every month, if do not want to change we are not forcing we are setting the budget for each month based on the last month budget was set.
+--  

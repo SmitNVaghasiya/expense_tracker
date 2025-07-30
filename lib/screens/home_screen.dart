@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:expense_tracker/screens/dashboard_screen.dart';
 import 'package:expense_tracker/screens/budgets_screen.dart';
-import 'package:expense_tracker/screens/transactions_screen.dart';
 import 'package:expense_tracker/screens/reports_screen.dart';
-import 'package:expense_tracker/screens/categories_screen.dart';
-import 'package:expense_tracker/screens/calculator_transaction_screen.dart';
+import 'package:expense_tracker/screens/accounts_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,10 +17,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   static const List<Widget> _widgetOptions = <Widget>[
     DashboardScreen(),
-    TransactionsScreen(),
-    BudgetsScreen(),
     ReportsScreen(),
-    CategoriesScreen(),
+    BudgetsScreen(),
+    AccountsScreen(),
   ];
 
   @override
@@ -64,40 +61,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         onPageChanged: _onPageChanged,
         children: _widgetOptions,
       ),
-      floatingActionButton:
-          _selectedIndex ==
-              0 // Dashboard screen
-          ? FloatingActionButton(
-              heroTag: 'dashboard_fab',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const CalculatorTransactionScreen(
-                      initialType: 'expense',
-                    ),
-                  ),
-                );
-              },
-              child: const Icon(Icons.add),
-            )
-          : _selectedIndex ==
-                2 // Budgets screen
-          ? FloatingActionButton(
-              heroTag: 'budget_fab',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const CalculatorTransactionScreen(
-                      initialType: 'expense',
-                    ),
-                  ),
-                );
-              },
-              child: const Icon(Icons.add),
-            )
-          : null,
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         items: const <BottomNavigationBarItem>[
@@ -106,20 +69,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             label: 'Dashboard',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.list),
-            label: 'Transactions',
+            icon: Icon(Icons.bar_chart),
+            label: 'Reports',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.account_balance),
             label: 'Budgets',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart),
-            label: 'Reports',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.category),
-            label: 'Categories',
+            icon: Icon(Icons.account_balance_wallet),
+            label: 'Accounts',
           ),
         ],
         currentIndex: _selectedIndex,

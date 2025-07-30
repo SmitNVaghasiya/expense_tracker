@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:expense_tracker/models/transaction.dart';
-import 'package:expense_tracker/models/budget.dart';
 import 'package:expense_tracker/services/data_service.dart';
 import 'package:expense_tracker/screens/calculator_transaction_screen.dart';
 import 'package:intl/intl.dart';
 
-enum TimePeriod { daily, weekly, monthly, yearly }
+enum TimePeriod { daily, weekly, monthly, threeMonths, sixMonths, yearly }
+
+enum TransactionFilter { all, income, expense }
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -17,12 +18,16 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   List<Transaction> _allTransactions = [];
   List<Transaction> _filteredTransactions = [];
-  List<Budget> _budgets = [];
-  TimePeriod _selectedPeriod = TimePeriod.monthly;
+  TimePeriod _selectedPeriod = TimePeriod.daily;
   DateTime _selectedDate = DateTime.now();
+  TransactionFilter _transactionFilter = TransactionFilter.all;
+
+  bool _showTotal = true;
+  bool _carryOver = true;
 
   double _totalExpenses = 0;
-  double _totalBudget = 0;
+  double _totalIncome = 0;
+  double _balance = 0;
   Map<String, double> _categoryExpenses = {};
 
   @override
@@ -33,11 +38,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadData() async {
     final transactions = await DataService.getTransactions();
-    final budgets = await DataService.getBudgets();
 
     setState(() {
       _allTransactions = transactions;
-      _budgets = budgets;
       _filterTransactionsByPeriod();
       _calculateTotals();
       _calculateCategoryExpenses();
@@ -64,6 +67,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         startDate = DateTime(now.year, now.month, 1);
         endDate = DateTime(now.year, now.month + 1, 1);
         break;
+      case TimePeriod.threeMonths:
+        startDate = DateTime(now.year, now.month - 2, 1);
+        endDate = DateTime(now.year, now.month + 1, 1);
+        break;
+      case TimePeriod.sixMonths:
+        startDate = DateTime(now.year, now.month - 5, 1);
+        endDate = DateTime(now.year, now.month + 1, 1);
+        break;
       case TimePeriod.yearly:
         startDate = DateTime(now.year, 1, 1);
         endDate = DateTime(now.year + 1, 1, 1);
@@ -71,36 +82,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     _filteredTransactions = _allTransactions.where((transaction) {
-      return transaction.date.isAfter(
+      final isInPeriod =
+          transaction.date.isAfter(
             startDate.subtract(const Duration(days: 1)),
           ) &&
           transaction.date.isBefore(endDate);
+
+      if (!isInPeriod) return false;
+
+      switch (_transactionFilter) {
+        case TransactionFilter.income:
+          return transaction.type == 'income';
+        case TransactionFilter.expense:
+          return transaction.type == 'expense';
+        case TransactionFilter.all:
+          return true;
+      }
     }).toList();
+
+    // Sort by date (newest first)
+    _filteredTransactions.sort((a, b) => b.date.compareTo(a.date));
   }
 
   void _calculateTotals() {
-    _totalExpenses = _filteredTransactions
-        .where((t) => t.type == 'expense')
+    _totalExpenses = _allTransactions
+        .where((t) => t.type == 'expense' && _isTransactionInPeriod(t))
         .fold(0, (sum, item) => sum + item.amount);
 
-    // Calculate budget for the selected period
-    _totalBudget = _budgets
-        .where((budget) => _isBudgetInPeriod(budget))
-        .fold(0, (sum, budget) => sum + budget.limit);
+    _totalIncome = _allTransactions
+        .where((t) => t.type == 'income' && _isTransactionInPeriod(t))
+        .fold(0, (sum, item) => sum + item.amount);
+
+    _balance = _totalIncome - _totalExpenses;
   }
 
-  bool _isBudgetInPeriod(Budget budget) {
+  bool _isTransactionInPeriod(Transaction transaction) {
     final now = _selectedDate;
+    DateTime startDate;
+    DateTime endDate;
+
     switch (_selectedPeriod) {
+      case TimePeriod.daily:
+        startDate = DateTime(now.year, now.month, now.day);
+        endDate = startDate.add(const Duration(days: 1));
+        break;
+      case TimePeriod.weekly:
+        final weekday = now.weekday;
+        startDate = now.subtract(Duration(days: weekday - 1));
+        startDate = DateTime(startDate.year, startDate.month, startDate.day);
+        endDate = startDate.add(const Duration(days: 7));
+        break;
       case TimePeriod.monthly:
-        return budget.startDate.year == now.year &&
-            budget.startDate.month == now.month;
+        startDate = DateTime(now.year, now.month, 1);
+        endDate = DateTime(now.year, now.month + 1, 1);
+        break;
+      case TimePeriod.threeMonths:
+        startDate = DateTime(now.year, now.month - 2, 1);
+        endDate = DateTime(now.year, now.month + 1, 1);
+        break;
+      case TimePeriod.sixMonths:
+        startDate = DateTime(now.year, now.month - 5, 1);
+        endDate = DateTime(now.year, now.month + 1, 1);
+        break;
       case TimePeriod.yearly:
-        return budget.startDate.year == now.year;
-      default:
-        return budget.startDate.isBefore(now.add(const Duration(days: 1))) &&
-            budget.endDate.isAfter(now.subtract(const Duration(days: 1)));
+        startDate = DateTime(now.year, 1, 1);
+        endDate = DateTime(now.year + 1, 1, 1);
+        break;
     }
+
+    return transaction.date.isAfter(
+          startDate.subtract(const Duration(days: 1)),
+        ) &&
+        transaction.date.isBefore(endDate);
   }
 
   void _calculateCategoryExpenses() {
@@ -116,42 +169,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_getDateRangeText()),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.calendar_today),
-            onPressed: _showDatePicker,
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _loadData,
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
+      backgroundColor: Colors.grey[50],
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _loadData,
+          child: SingleChildScrollView(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Time period navigation
-                _buildTimePeriodTabs(),
-                const SizedBox(height: 20),
+                // Clean Header
+                _buildCleanHeader(),
 
-                // Budget vs Expense summary
-                _buildBudgetSummary(),
-                const SizedBox(height: 20),
+                // Main Content
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Transaction filter pills
+                      _buildTransactionFilterPills(),
 
-                // Category breakdown
-                _buildCategoryBreakdown(),
-                const SizedBox(height: 20),
+                      const SizedBox(height: 16),
 
-                // Recent transactions
-                _buildRecentTransactions(),
+                      // Transaction List
+                      _buildTransactionList(),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _navigateToAddTransaction('expense'),
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -168,25 +219,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return '${DateFormat('MMM dd').format(weekStart)} - ${DateFormat('MMM dd').format(weekEnd)}';
       case TimePeriod.monthly:
         return DateFormat('MMMM yyyy').format(_selectedDate);
+      case TimePeriod.threeMonths:
+        final startMonth = DateTime(
+          _selectedDate.year,
+          _selectedDate.month - 2,
+          1,
+        );
+        return '${DateFormat('MMM').format(startMonth)} - ${DateFormat('MMM yyyy').format(_selectedDate)}';
+      case TimePeriod.sixMonths:
+        final startMonth = DateTime(
+          _selectedDate.year,
+          _selectedDate.month - 5,
+          1,
+        );
+        return '${DateFormat('MMM').format(startMonth)} - ${DateFormat('MMM yyyy').format(_selectedDate)}';
       case TimePeriod.yearly:
         return DateFormat('yyyy').format(_selectedDate);
-    }
-  }
-
-  void _showDatePicker() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-        _filterTransactionsByPeriod();
-        _calculateTotals();
-        _calculateCategoryExpenses();
-      });
     }
   }
 
@@ -194,7 +242,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => CalculatorTransactionScreen(initialType: type),
+        builder: (context) => CalculatorTransactionScreen(
+          initialType: type,
+          initialDate: _selectedDate,
+        ),
       ),
     );
     if (result == true) {
@@ -202,267 +253,439 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Widget _buildTimePeriodTabs() {
+  void _navigateToPreviousPeriod() {
+    setState(() {
+      switch (_selectedPeriod) {
+        case TimePeriod.daily:
+          _selectedDate = _selectedDate.subtract(const Duration(days: 1));
+          break;
+        case TimePeriod.weekly:
+          _selectedDate = _selectedDate.subtract(const Duration(days: 7));
+          break;
+        case TimePeriod.monthly:
+          _selectedDate = DateTime(
+            _selectedDate.year,
+            _selectedDate.month - 1,
+            _selectedDate.day,
+          );
+          break;
+        case TimePeriod.threeMonths:
+          _selectedDate = DateTime(
+            _selectedDate.year,
+            _selectedDate.month - 3,
+            _selectedDate.day,
+          );
+          break;
+        case TimePeriod.sixMonths:
+          _selectedDate = DateTime(
+            _selectedDate.year,
+            _selectedDate.month - 6,
+            _selectedDate.day,
+          );
+          break;
+        case TimePeriod.yearly:
+          _selectedDate = DateTime(
+            _selectedDate.year - 1,
+            _selectedDate.month,
+            _selectedDate.day,
+          );
+          break;
+      }
+      _filterTransactionsByPeriod();
+      _calculateTotals();
+      _calculateCategoryExpenses();
+    });
+  }
+
+  void _navigateToNextPeriod() {
+    setState(() {
+      switch (_selectedPeriod) {
+        case TimePeriod.daily:
+          _selectedDate = _selectedDate.add(const Duration(days: 1));
+          break;
+        case TimePeriod.weekly:
+          _selectedDate = _selectedDate.add(const Duration(days: 7));
+          break;
+        case TimePeriod.monthly:
+          _selectedDate = DateTime(
+            _selectedDate.year,
+            _selectedDate.month + 1,
+            _selectedDate.day,
+          );
+          break;
+        case TimePeriod.threeMonths:
+          _selectedDate = DateTime(
+            _selectedDate.year,
+            _selectedDate.month + 3,
+            _selectedDate.day,
+          );
+          break;
+        case TimePeriod.sixMonths:
+          _selectedDate = DateTime(
+            _selectedDate.year,
+            _selectedDate.month + 6,
+            _selectedDate.day,
+          );
+          break;
+        case TimePeriod.yearly:
+          _selectedDate = DateTime(
+            _selectedDate.year + 1,
+            _selectedDate.month,
+            _selectedDate.day,
+          );
+          break;
+      }
+      _filterTransactionsByPeriod();
+      _calculateTotals();
+      _calculateCategoryExpenses();
+    });
+  }
+
+  void _showDisplayOptions() {
+    showDialog(
+      context: context,
+      builder: (context) => _buildDisplayOptionsModal(),
+    );
+  }
+
+  Widget _buildCleanHeader() {
     return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Row(
-        children: TimePeriod.values.map((period) {
-          final isSelected = _selectedPeriod == period;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() {
-                  _selectedPeriod = period;
-                  _filterTransactionsByPeriod();
-                  _calculateTotals();
-                  _calculateCategoryExpenses();
-                });
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? Theme.of(context).colorScheme.primary
-                      : null,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  period.name.toUpperCase(),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: isSelected
-                        ? Colors.white
-                        : Theme.of(context).colorScheme.onSurface,
-                    fontWeight: isSelected
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-                    fontSize: 12,
-                  ),
+      color: Colors.white,
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          // Top row with hamburger menu, title, and search
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.menu, color: Colors.black87),
+                onPressed: () {},
+              ),
+              const Text(
+                'MyMoney',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'cursive',
+                  color: Colors.black87,
                 ),
               ),
-            ),
-          );
-        }).toList(),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.search, color: Colors.black87),
+                    onPressed: () {},
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.filter_list, color: Colors.black87),
+                    onPressed: _showDisplayOptions,
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Date navigation row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left, color: Colors.green),
+                onPressed: _navigateToPreviousPeriod,
+              ),
+              Text(
+                _getDateRangeText(),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.green,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right, color: Colors.green),
+                onPressed: _navigateToNextPeriod,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Expense/Income/Balance summary
+          if (_showTotal) _buildSummaryRow(),
+        ],
       ),
     );
   }
 
-  Widget _buildBudgetSummary() {
-    final budgetProgress = _totalBudget > 0
-        ? _totalExpenses / _totalBudget
-        : 0.0;
-    final overSpend = _totalExpenses - _totalBudget;
+  Widget _buildSummaryRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            children: [
+              const Text(
+                'EXPENSE',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '₹${_totalExpenses.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Column(
+            children: [
+              const Text(
+                'INCOME',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '₹${_totalIncome.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Column(
+            children: [
+              const Text(
+                'BALANCE',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '₹${_balance.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: _balance >= 0 ? Colors.green : Colors.red,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildTransactionFilterPills() {
+    return Row(
+      children: [
+        _buildFilterPill('All', TransactionFilter.all, Icons.check),
+        const SizedBox(width: 8),
+        _buildFilterPill(
+          'Income',
+          TransactionFilter.income,
+          Icons.arrow_downward,
+        ),
+        const SizedBox(width: 8),
+        _buildFilterPill(
+          'Expense',
+          TransactionFilter.expense,
+          Icons.arrow_upward,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterPill(
+    String label,
+    TransactionFilter filter,
+    IconData icon,
+  ) {
+    final isSelected = _transactionFilter == filter;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _transactionFilter = filter;
+          _filterTransactionsByPeriod();
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.blue : Colors.grey[200],
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Budget Overview',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                if (_totalBudget > 0)
-                  Text(
-                    '${(budgetProgress * 100).toStringAsFixed(1)}%',
-                    style: TextStyle(
-                      color: budgetProgress > 0.9
-                          ? Theme.of(context).colorScheme.error
-                          : Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-              ],
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected ? Colors.white : Colors.black87,
             ),
-            const SizedBox(height: 12),
-
-            if (_totalBudget > 0) ...[
-              LinearProgressIndicator(
-                value: budgetProgress.clamp(0.0, 1.0),
-                backgroundColor: Theme.of(
-                  context,
-                ).colorScheme.outline.withValues(alpha: 0.2),
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  budgetProgress > 0.9
-                      ? Theme.of(context).colorScheme.error
-                      : Theme.of(context).colorScheme.primary,
-                ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.black87,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
-              const SizedBox(height: 16),
-            ],
-
-            Row(
-              children: [
-                Expanded(
-                  child: _buildSummaryCard(
-                    'Budget',
-                    _totalBudget,
-                    Theme.of(context).colorScheme.primary,
-                    Icons.account_balance_wallet,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildSummaryCard(
-                    'Expenses',
-                    _totalExpenses,
-                    Theme.of(context).colorScheme.error,
-                    Icons.trending_up,
-                  ),
-                ),
-              ],
             ),
-
-            if (overSpend > 0) ...[
-              const SizedBox(height: 12),
-              _buildSummaryCard(
-                'Over Spend',
-                overSpend,
-                Theme.of(context).colorScheme.error,
-                Icons.warning,
-                isNegative: true,
-              ),
-            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSummaryCard(
-    String title,
-    double amount,
-    Color color,
-    IconData icon, {
-    bool isNegative = false,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 16),
-              const SizedBox(width: 4),
-              Text(
-                title,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${isNegative ? '-' : ''}${NumberFormat.currency(symbol: '₹').format(amount)}',
-            style: TextStyle(
-              color: color,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCategoryBreakdown() {
-    if (_categoryExpenses.isEmpty) {
-      return Card(
+  Widget _buildTransactionList() {
+    if (_filteredTransactions.isEmpty) {
+      return Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Center(
-            child: Text(
-              'No expenses in this period',
-              style: TextStyle(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.6),
-                fontSize: 16,
-              ),
-            ),
+          padding: const EdgeInsets.all(32.0),
+          child: Text(
+            'No transactions in this period',
+            style: TextStyle(color: Colors.grey[600], fontSize: 16),
           ),
         ),
       );
     }
 
-    final sortedCategories = _categoryExpenses.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    // Group transactions by date
+    final groupedTransactions = <String, List<Transaction>>{};
+    for (final transaction in _filteredTransactions) {
+      final dateKey = DateFormat('MMM dd, EEEE').format(transaction.date);
+      if (!groupedTransactions.containsKey(dateKey)) {
+        groupedTransactions[dateKey] = [];
+      }
+      groupedTransactions[dateKey]!.add(transaction);
+    }
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+    return Column(
+      children: groupedTransactions.entries.map((entry) {
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Category Breakdown',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            // Date header
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                entry.key,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            // Transactions for this date
+            ...entry.value.map(
+              (transaction) => _buildTransactionItem(transaction),
             ),
             const SizedBox(height: 16),
-            ...sortedCategories.map(
-              (entry) => _buildCategoryItem(entry.key, entry.value),
-            ),
           ],
-        ),
-      ),
+        );
+      }).toList(),
     );
   }
 
-  Widget _buildCategoryItem(String category, double amount) {
-    final percentage = _totalExpenses > 0 ? (amount / _totalExpenses) * 100 : 0;
+  Widget _buildTransactionItem(Transaction transaction) {
+    final isIncome = transaction.type == 'income';
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withValues(alpha: 0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Row(
         children: [
-          Expanded(
-            flex: 3,
-            child: Text(
-              category,
-              style: const TextStyle(fontWeight: FontWeight.w500),
+          // Category icon
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: isIncome
+                  ? Colors.green[100]
+                  : _getCategoryColor(transaction.category),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Icon(
+              _getCategoryIcon(transaction.category),
+              color: isIncome ? Colors.green[700] : Colors.white,
+              size: 24,
             ),
           ),
+
+          const SizedBox(width: 16),
+
+          // Transaction details
           Expanded(
-            flex: 2,
-            child: Text(
-              NumberFormat.currency(symbol: '₹').format(amount),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.error,
-                fontWeight: FontWeight.bold,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  transaction.category,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(
+                      transaction.accountId == 'cash'
+                          ? Icons.account_balance_wallet
+                          : Icons.credit_card,
+                      size: 14,
+                      color: Colors.grey[600],
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      transaction.accountId ?? 'Unknown',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 8),
+
+          // Amount
           Text(
-            '${percentage.toStringAsFixed(1)}%',
+            '${isIncome ? '+' : '-'}₹${transaction.amount.toStringAsFixed(2)}',
             style: TextStyle(
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.6),
-              fontSize: 12,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: isIncome ? Colors.green : Colors.red,
             ),
           ),
         ],
@@ -470,104 +693,225 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildRecentTransactions() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+  Widget _buildDisplayOptionsModal() {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        constraints: const BoxConstraints(maxWidth: 300),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text(
+              'Display options',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // View mode section
+            const Text(
+              'View mode:',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+
+            const SizedBox(height: 12),
+
+            ...TimePeriod.values.map(
+              (period) => _buildOptionItem(
+                _getPeriodDisplayName(period),
+                _selectedPeriod == period,
+                isPremium:
+                    period == TimePeriod.threeMonths ||
+                    period == TimePeriod.sixMonths ||
+                    period == TimePeriod.yearly,
+                onTap: () {
+                  setState(() {
+                    _selectedPeriod = period;
+                    _filterTransactionsByPeriod();
+                    _calculateTotals();
+                    _calculateCategoryExpenses();
+                  });
+                  Navigator.pop(context);
+                },
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Show total section
+            const Text(
+              'Show total:',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+
+            const SizedBox(height: 12),
+
+            _buildOptionItem(
+              'YES',
+              _showTotal,
+              onTap: () {
+                setState(() {
+                  _showTotal = true;
+                });
+                Navigator.pop(context);
+              },
+            ),
+
+            _buildOptionItem(
+              'NO',
+              !_showTotal,
+              onTap: () {
+                setState(() {
+                  _showTotal = false;
+                });
+                Navigator.pop(context);
+              },
+            ),
+
+            const SizedBox(height: 24),
+
+            // Carry over section
+            const Text(
+              'Carry over:',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+
+            const SizedBox(height: 12),
+
+            _buildOptionItem(
+              'ON',
+              _carryOver,
+              onTap: () {
+                setState(() {
+                  _carryOver = true;
+                });
+                Navigator.pop(context);
+              },
+            ),
+
+            _buildOptionItem(
+              'OFF',
+              !_carryOver,
+              onTap: () {
+                setState(() {
+                  _carryOver = false;
+                });
+                Navigator.pop(context);
+              },
+            ),
+
+            const SizedBox(height: 16),
+
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Recent Transactions',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                const Icon(Icons.info_outline, size: 16, color: Colors.grey),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'With Carry over enabled, monthly surplus will be added to the next month.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                   ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/transactions');
-                  },
-                  child: const Text('View All'),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            _filteredTransactions.isEmpty
-                ? Container(
-                    padding: const EdgeInsets.all(24),
-                    alignment: Alignment.center,
-                    child: Text(
-                      'No transactions in this period',
-                      style: TextStyle(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.6),
-                        fontSize: 16,
-                      ),
-                    ),
-                  )
-                : Column(
-                    children: _filteredTransactions
-                        .take(5)
-                        .map(
-                          (transaction) => _buildTransactionItem(transaction),
-                        )
-                        .toList(),
-                  ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTransactionItem(Transaction transaction) {
-    final isIncome = transaction.type == 'income';
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: isIncome
-                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
-                : Theme.of(context).colorScheme.error.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            isIncome ? Icons.arrow_downward : Icons.arrow_upward,
-            color: isIncome
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.error,
-            size: 16,
-          ),
-        ),
-        title: Text(
-          transaction.title,
-          style: const TextStyle(fontWeight: FontWeight.w500),
-        ),
-        subtitle: Text(
-          '${transaction.category} • ${DateFormat('MMM dd').format(transaction.date)}',
-          style: TextStyle(
-            color: Theme.of(
-              context,
-            ).colorScheme.onSurface.withValues(alpha: 0.6),
-            fontSize: 12,
-          ),
-        ),
-        trailing: Text(
-          '${isIncome ? '+' : '-'}${NumberFormat.currency(symbol: '₹').format(transaction.amount)}',
-          style: TextStyle(
-            color: isIncome
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.error,
-            fontWeight: FontWeight.bold,
-          ),
+  Widget _buildOptionItem(
+    String title,
+    bool isSelected, {
+    bool isPremium = false,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Icon(
+              isSelected ? Icons.check : Icons.radio_button_unchecked,
+              color: isSelected ? Colors.green : Colors.grey,
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 16,
+                color: isSelected ? Colors.green : Colors.grey[700],
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+            if (isPremium) ...[
+              const SizedBox(width: 8),
+              const Icon(Icons.star, color: Colors.amber, size: 16),
+            ],
+          ],
         ),
       ),
     );
+  }
+
+  String _getPeriodDisplayName(TimePeriod period) {
+    switch (period) {
+      case TimePeriod.daily:
+        return 'DAILY';
+      case TimePeriod.weekly:
+        return 'WEEKLY';
+      case TimePeriod.monthly:
+        return 'MONTHLY';
+      case TimePeriod.threeMonths:
+        return '3 MONTHS';
+      case TimePeriod.sixMonths:
+        return '6 MONTHS';
+      case TimePeriod.yearly:
+        return 'YEARLY';
+    }
+  }
+
+  Color _getCategoryColor(String category) {
+    switch (category.toLowerCase()) {
+      case 'food':
+      case 'food & dining':
+        return Colors.red;
+      case 'auto rickshaw':
+      case 'transport':
+        return Colors.blue;
+      case 'snacks':
+        return Colors.blue;
+      case 'mobile recharge':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getCategoryIcon(String category) {
+    switch (category.toLowerCase()) {
+      case 'food':
+      case 'food & dining':
+        return Icons.restaurant;
+      case 'auto rickshaw':
+      case 'transport':
+        return Icons.directions_bus;
+      case 'snacks':
+        return Icons.local_grocery_store;
+      case 'mobile recharge':
+        return Icons.phone;
+      case 'salary':
+        return Icons.work;
+      default:
+        return Icons.category;
+    }
   }
 }

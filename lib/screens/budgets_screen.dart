@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:expense_tracker/models/account.dart';
 import 'package:expense_tracker/models/budget.dart';
 import 'package:expense_tracker/models/transaction.dart';
 import 'package:expense_tracker/services/data_service.dart';
@@ -13,11 +12,9 @@ class BudgetsScreen extends StatefulWidget {
 }
 
 class _BudgetsScreenState extends State<BudgetsScreen> {
-  List<Account> _accounts = [];
   List<Budget> _budgets = [];
   List<Transaction> _transactions = [];
   DateTime _selectedMonth = DateTime.now();
-  double _totalBalance = 0;
   double _totalBudget = 0;
   double _totalSpent = 0;
 
@@ -78,12 +75,10 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
   }
 
   Future<void> _loadData() async {
-    final accounts = await DataService.getAccounts();
     final budgets = await DataService.getBudgets();
     final transactions = await DataService.getTransactions();
 
     setState(() {
-      _accounts = accounts;
       _budgets = budgets;
       _transactions = transactions;
 
@@ -92,8 +87,6 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
   }
 
   void _calculateTotals() {
-    _totalBalance = _accounts.fold(0, (sum, account) => sum + account.balance);
-
     // Calculate budget and spent for selected month
     final monthBudgets = _budgets
         .where(
@@ -132,10 +125,6 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Account Balance Section
-                _buildAccountBalanceSection(),
-                const SizedBox(height: 24),
-
                 // Budget Overview Section
                 _buildBudgetOverviewSection(),
                 const SizedBox(height: 24),
@@ -148,143 +137,17 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddTransactionDialog(),
+        onPressed: () => _showAddCategoryDialog(),
         child: const Icon(Icons.add),
       ),
     );
   }
 
-  Widget _buildAccountBalanceSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Account Balances',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            ElevatedButton.icon(
-              onPressed: () => _showAddAccountDialog(),
-              icon: const Icon(Icons.add),
-              label: const Text('ADD NEW ACCOUNT'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Total Balance Card
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Total Balance',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                NumberFormat.currency(symbol: '₹').format(_totalBalance),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        // Individual Account Cards
-        if (_accounts.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(24),
-            alignment: Alignment.center,
-            child: const Text(
-              'No accounts yet. Add your first account!',
-              style: TextStyle(color: Colors.grey),
-            ),
-          )
-        else
-          Column(
-            children: _accounts
-                .map((account) => _buildAccountCard(account))
-                .toList(),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildAccountCard(Account account) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: _getAccountColor(account.type),
-          child: Icon(_getAccountIcon(account.type), color: Colors.white),
-        ),
-        title: Text(account.name),
-        subtitle: Text(account.type.toUpperCase()),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              NumberFormat.currency(symbol: '₹').format(account.balance),
-              style: TextStyle(
-                color: account.balance >= 0 ? Colors.green : Colors.red,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(width: 8),
-            PopupMenuButton<String>(
-              onSelected: (value) => _handleAccountAction(value, account),
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: Row(
-                    children: [
-                      Icon(Icons.edit),
-                      SizedBox(width: 8),
-                      Text('Edit'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text('Delete', style: TextStyle(color: Colors.red)),
-                    ],
-                  ),
-                ),
-              ],
-              child: const Icon(Icons.more_vert),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAddTransactionDialog() {
+  void _showAddOptionsDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add Transaction'),
+        title: const Text('Add New'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -302,6 +165,15 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, '/expenses');
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.category, color: Colors.blue),
+              title: const Text('Add New Category'),
+              onTap: () {
+                Navigator.pop(context);
+                _showAddCategoryDialog();
               },
             ),
           ],
@@ -426,26 +298,6 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Categories with Budgets',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            ElevatedButton.icon(
-              onPressed: () => _showAddCategoryDialog(),
-              icon: const Icon(Icons.add),
-              label: const Text('ADD NEW CATEGORY'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
         // Income Categories
         const Text(
           'Income Categories',
@@ -555,78 +407,6 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
                 child: const Text('SET BUDGET'),
               ),
         onTap: budget.limit > 0 ? () => _showEditBudgetDialog(budget) : null,
-      ),
-    );
-  }
-
-  void _showAddAccountDialog() {
-    final nameController = TextEditingController();
-    final balanceController = TextEditingController();
-    String selectedType = 'cash';
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add New Account'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Account Name',
-                hintText: 'e.g., Cash, HDFC Bank',
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: balanceController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Initial Balance',
-                hintText: '0.00',
-              ),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: selectedType,
-              decoration: const InputDecoration(labelText: 'Account Type'),
-              items: const [
-                DropdownMenuItem(value: 'cash', child: Text('Cash')),
-                DropdownMenuItem(value: 'bank', child: Text('Bank Account')),
-                DropdownMenuItem(value: 'credit', child: Text('Credit Card')),
-                DropdownMenuItem(value: 'savings', child: Text('Savings')),
-              ],
-              onChanged: (value) {
-                selectedType = value!;
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (nameController.text.isNotEmpty &&
-                  balanceController.text.isNotEmpty) {
-                final account = Account(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  name: nameController.text,
-                  balance: double.tryParse(balanceController.text) ?? 0,
-                  type: selectedType,
-                  createdAt: DateTime.now(),
-                );
-                DataService.addAccount(account);
-                Navigator.pop(context);
-                _loadData();
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
       ),
     );
   }
@@ -896,137 +676,5 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
         ],
       ),
     );
-  }
-
-  void _handleAccountAction(String action, Account account) {
-    switch (action) {
-      case 'edit':
-        _showEditAccountDialog(account);
-        break;
-      case 'delete':
-        _showDeleteAccountDialog(account);
-        break;
-    }
-  }
-
-  void _showEditAccountDialog(Account account) {
-    final nameController = TextEditingController(text: account.name);
-    final balanceController = TextEditingController(
-      text: account.balance.toString(),
-    );
-    String selectedType = account.type;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Account'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'Account Name'),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: balanceController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Balance'),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: selectedType,
-              decoration: const InputDecoration(labelText: 'Account Type'),
-              items: const [
-                DropdownMenuItem(value: 'cash', child: Text('Cash')),
-                DropdownMenuItem(value: 'bank', child: Text('Bank Account')),
-                DropdownMenuItem(value: 'credit', child: Text('Credit Card')),
-                DropdownMenuItem(value: 'savings', child: Text('Savings')),
-              ],
-              onChanged: (value) {
-                selectedType = value!;
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (nameController.text.isNotEmpty &&
-                  balanceController.text.isNotEmpty) {
-                final updatedAccount = account.copyWith(
-                  name: nameController.text,
-                  balance: double.tryParse(balanceController.text) ?? 0,
-                  type: selectedType,
-                );
-                DataService.updateAccount(updatedAccount);
-                Navigator.pop(context);
-                _loadData();
-              }
-            },
-            child: const Text('Update'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteAccountDialog(Account account) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Account'),
-        content: Text('Are you sure you want to delete ${account.name}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              DataService.deleteAccount(account.id);
-              Navigator.pop(context);
-              _loadData();
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _getAccountColor(String type) {
-    switch (type) {
-      case 'cash':
-        return Colors.green;
-      case 'bank':
-        return Colors.blue;
-      case 'credit':
-        return Colors.orange;
-      case 'savings':
-        return Colors.purple;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  IconData _getAccountIcon(String type) {
-    switch (type) {
-      case 'cash':
-        return Icons.account_balance_wallet;
-      case 'bank':
-        return Icons.account_balance;
-      case 'credit':
-        return Icons.credit_card;
-      case 'savings':
-        return Icons.savings;
-      default:
-        return Icons.account_balance;
-    }
   }
 }

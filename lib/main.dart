@@ -3,9 +3,8 @@ import 'package:expense_tracker/screens/home_screen.dart';
 import 'package:expense_tracker/screens/expenses_screen.dart';
 import 'package:expense_tracker/screens/income_screen.dart';
 import 'package:expense_tracker/screens/budgets_screen.dart';
-import 'package:expense_tracker/screens/transactions_screen.dart';
 import 'package:expense_tracker/screens/reports_screen.dart';
-import 'package:expense_tracker/screens/categories_screen.dart';
+import 'package:expense_tracker/screens/accounts_screen.dart';
 
 void main() {
   runApp(const ExpenseTrackerApp());
@@ -31,9 +30,8 @@ class ExpenseTrackerApp extends StatelessWidget {
         '/expenses': (context) => const ExpensesScreen(),
         '/income': (context) => const IncomeScreen(),
         '/budgets': (context) => const BudgetsScreen(),
-        '/transactions': (context) => const TransactionsScreen(),
         '/reports': (context) => const ReportsScreen(),
-        '/categories': (context) => const CategoriesScreen(),
+        '/accounts': (context) => const AccountsScreen(),
       },
       debugShowCheckedModeBanner: false,
     );

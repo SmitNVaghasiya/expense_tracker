@@ -7,8 +7,13 @@ import 'package:uuid/uuid.dart';
 
 class CalculatorTransactionScreen extends StatefulWidget {
   final String initialType;
+  final DateTime? initialDate;
 
-  const CalculatorTransactionScreen({super.key, required this.initialType});
+  const CalculatorTransactionScreen({
+    super.key, 
+    required this.initialType,
+    this.initialDate,
+  });
 
   @override
   State<CalculatorTransactionScreen> createState() =>
@@ -22,6 +27,7 @@ class _CalculatorTransactionScreenState
   String _calculationString = '';
   String _selectedCategory = '';
   String? _selectedAccountId;
+  String? _selectedToAccountId; // For transfer functionality
   List<Account> _accounts = [];
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
@@ -52,6 +58,12 @@ class _CalculatorTransactionScreenState
     'Other Income',
   ];
 
+  final List<String> _transferCategories = [
+    'Transfer',
+    'Internal Transfer',
+    'Account Transfer',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -59,6 +71,7 @@ class _CalculatorTransactionScreenState
     _selectedCategory = _selectedType == 'expense'
         ? _expenseCategories.first
         : _incomeCategories.first;
+    _selectedDate = widget.initialDate ?? DateTime.now();
     _loadAccounts();
   }
 
@@ -91,6 +104,10 @@ class _CalculatorTransactionScreenState
       setState(() {
         _accounts = accounts;
         _selectedAccountId = accounts.first.id;
+        // For transfer, set the second account if available
+        if (accounts.length > 1) {
+          _selectedToAccountId = accounts[1].id;
+        }
       });
     }
   }
@@ -196,6 +213,32 @@ class _CalculatorTransactionScreenState
     return result;
   }
 
+  Future<void> _selectDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
+  }
+
+  Future<void> _selectTime() async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
+    );
+    if (picked != null && picked != _selectedTime) {
+      setState(() {
+        _selectedTime = picked;
+      });
+    }
+  }
+
   Future<void> _saveTransaction() async {
     if (double.tryParse(_displayAmount) == null ||
         double.parse(_displayAmount) <= 0) {
@@ -210,6 +253,19 @@ class _CalculatorTransactionScreenState
         context,
       ).showSnackBar(const SnackBar(content: Text('Please select an account')));
       return;
+    }
+
+    // For transfer, validate that we have two different accounts
+    if (_selectedType == 'transfer') {
+      if (_selectedToAccountId == null ||
+          _selectedToAccountId == _selectedAccountId) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please select two different accounts for transfer'),
+          ),
+        );
+        return;
+      }
     }
 
     final transaction = Transaction(
@@ -237,6 +293,34 @@ class _CalculatorTransactionScreenState
         _selectedAccountId!,
         double.parse(_displayAmount),
         _selectedType,
+      );
+    }
+
+    // For transfer, create a second transaction for the destination account
+    if (_selectedType == 'transfer' && _selectedToAccountId != null) {
+      final transferTransaction = Transaction(
+        id: const Uuid().v4(),
+        title:
+            'Transfer to ${_accounts.firstWhere((a) => a.id == _selectedToAccountId).name}',
+        amount: double.parse(_displayAmount),
+        date: DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+          _selectedTime.hour,
+          _selectedTime.minute,
+        ),
+        category: 'Transfer',
+        type: 'income', // This will add money to the destination account
+        accountId: _selectedToAccountId,
+        notes: _notesController.text.isNotEmpty ? _notesController.text : null,
+      );
+
+      await DataService.addTransaction(transferTransaction);
+      await DataService.updateAccountBalance(
+        _selectedToAccountId!,
+        double.parse(_displayAmount),
+        'income',
       );
     }
 
@@ -349,17 +433,26 @@ class _CalculatorTransactionScreenState
                 Expanded(
                   child: GestureDetector(
                     onTap: () {
-                      // Transfer functionality can be added later
+                      setState(() {
+                        _selectedType = 'transfer';
+                        _selectedCategory = _transferCategories.first;
+                      });
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: _selectedType == 'transfer'
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       child: Text(
                         'TRANSFER',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.5),
+                          color: _selectedType == 'transfer'
+                              ? Colors.white
+                              : Theme.of(context).colorScheme.onSurface,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -377,7 +470,7 @@ class _CalculatorTransactionScreenState
               children: [
                 Expanded(
                   child: _buildSelectionButton(
-                    'Account',
+                    _selectedType == 'transfer' ? 'From Account' : 'Account',
                     _selectedAccountId != null
                         ? _accounts
                               .firstWhere((a) => a.id == _selectedAccountId)
@@ -388,14 +481,28 @@ class _CalculatorTransactionScreenState
                   ),
                 ),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: _buildSelectionButton(
-                    'Category',
-                    _selectedCategory,
-                    Icons.local_offer,
-                    () => _showCategorySelector(),
+                if (_selectedType == 'transfer')
+                  Expanded(
+                    child: _buildSelectionButton(
+                      'To Account',
+                      _selectedToAccountId != null
+                          ? _accounts
+                                .firstWhere((a) => a.id == _selectedToAccountId)
+                                .name
+                          : 'Select Account',
+                      Icons.account_balance_wallet,
+                      () => _showToAccountSelector(),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: _buildSelectionButton(
+                      'Category',
+                      _selectedCategory,
+                      Icons.local_offer,
+                      () => _showCategorySelector(),
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -475,18 +582,48 @@ class _CalculatorTransactionScreenState
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    DateFormat('MMM dd, yyyy').format(_selectedDate),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  child: GestureDetector(
+                    onTap: _selectDate,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outline.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Text(
+                        DateFormat('MMM dd, yyyy').format(_selectedDate),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ),
                   ),
                 ),
                 const Text('|'),
                 Expanded(
-                  child: Text(
-                    _selectedTime.format(context),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  child: GestureDetector(
+                    onTap: _selectTime,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outline.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Text(
+                        _selectedTime.format(context),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -623,9 +760,11 @@ class _CalculatorTransactionScreenState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Select Account',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              _selectedType == 'transfer'
+                  ? 'Select From Account'
+                  : 'Select Account',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             ..._accounts.map(
@@ -652,6 +791,51 @@ class _CalculatorTransactionScreenState
                 },
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showToAccountSelector() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Select To Account',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            ..._accounts
+                .where((account) => account.id != _selectedAccountId)
+                .map(
+                  (account) => ListTile(
+                    leading: Icon(
+                      Icons.account_balance_wallet,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: Text(account.name),
+                    subtitle: Text(
+                      '${account.type} • ₹${NumberFormat.currency(symbol: '').format(account.balance)}',
+                    ),
+                    trailing: _selectedToAccountId == account.id
+                        ? Icon(
+                            Icons.check,
+                            color: Theme.of(context).colorScheme.primary,
+                          )
+                        : null,
+                    onTap: () {
+                      setState(() {
+                        _selectedToAccountId = account.id;
+                      });
+                      Navigator.pop(context);
+                    },
+                  ),
+                ),
           ],
         ),
       ),

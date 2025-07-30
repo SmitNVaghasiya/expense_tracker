@@ -6,4 +6,4 @@ export 'budgets_screen.dart';
 export 'reports_screen.dart';
 export 'calculator_transaction_screen.dart';
 export 'add_budget_screen.dart';
-export 'categories_screen.dart';
+export 'accounts_screen.dart';
