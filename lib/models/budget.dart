@@ -16,19 +16,37 @@ class Budget {
   });
 
   Budget.fromJson(Map<String, dynamic> json)
-      : id = json['id'],
-        name = json['name'],
-        limit = json['limit'],
-        category = json['category'],
-        startDate = DateTime.parse(json['startDate']),
-        endDate = DateTime.parse(json['endDate']);
+    : id = json['id'],
+      name = json['name'],
+      limit = json['limit'],
+      category = json['category'],
+      startDate = DateTime.parse(json['startDate']),
+      endDate = DateTime.parse(json['endDate']);
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'limit': limit,
-        'category': category,
-        'startDate': startDate.toIso8601String(),
-        'endDate': endDate.toIso8601String(),
-      };
+    'id': id,
+    'name': name,
+    'limit': limit,
+    'category': category,
+    'startDate': startDate.toIso8601String(),
+    'endDate': endDate.toIso8601String(),
+  };
+
+  Budget copyWith({
+    String? id,
+    String? name,
+    double? limit,
+    String? category,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
+    return Budget(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      limit: limit ?? this.limit,
+      category: category ?? this.category,
+      startDate: startDate ?? this.startDate,
+      endDate: endDate ?? this.endDate,
+    );
+  }
 }

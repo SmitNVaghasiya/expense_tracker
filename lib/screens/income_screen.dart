@@ -98,7 +98,7 @@ class _IncomeScreenState extends State<IncomeScreen> {
                         '${income.category} • ${DateFormat('MMM dd, yyyy').format(income.date)}',
                       ),
                       trailing: Text(
-                        '+${NumberFormat.currency(symbol: '\$').format(income.amount)}',
+                        '+${NumberFormat.currency(symbol: '₹').format(income.amount)}',
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.bold,

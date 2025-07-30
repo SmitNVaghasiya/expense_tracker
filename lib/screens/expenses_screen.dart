@@ -96,7 +96,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                         '${expense.category} • ${DateFormat('MMM dd, yyyy').format(expense.date)}',
                       ),
                       trailing: Text(
-                        '-${NumberFormat.currency(symbol: '\$').format(expense.amount)}',
+                        '-${NumberFormat.currency(symbol: '₹').format(expense.amount)}',
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.error,
                           fontWeight: FontWeight.bold,

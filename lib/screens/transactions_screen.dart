@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:expense_tracker/models/transaction.dart';
 import 'package:expense_tracker/services/data_service.dart';
-import 'package:expense_tracker/screens/add_transaction_screen.dart';
+import 'package:expense_tracker/screens/calculator_transaction_screen.dart';
 import 'package:intl/intl.dart';
 
 class TransactionsScreen extends StatefulWidget {
@@ -47,10 +47,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Transactions'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Transactions'), centerTitle: true),
       body: Column(
         children: [
           // Filter buttons
@@ -94,18 +91,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           const SizedBox(height: 16),
                           const Text(
                             'No transactions yet',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey,
-                            ),
+                            style: TextStyle(fontSize: 18, color: Colors.grey),
                           ),
                           const SizedBox(height: 8),
                           const Text(
                             'Add your first transaction',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey,
-                            ),
+                            style: TextStyle(fontSize: 16, color: Colors.grey),
                           ),
                         ],
                       ),
@@ -123,14 +114,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: isIncome
-                                    ? Theme.of(context)
-                                        .colorScheme
-                                        .primary
-                                        .withValues(alpha: 0.1)
-                                    : Theme.of(context)
-                                        .colorScheme
-                                        .error
-                                        .withValues(alpha: 0.1),
+                                    ? Theme.of(context).colorScheme.primary
+                                          .withValues(alpha: 0.1)
+                                    : Theme.of(context).colorScheme.error
+                                          .withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Icon(
@@ -147,7 +134,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               '${transaction.category} • ${DateFormat('MMM dd, yyyy').format(transaction.date)}',
                             ),
                             trailing: Text(
-                              '${isIncome ? '+' : '-'}${NumberFormat.currency(symbol: '\$').format(transaction.amount)}',
+                              '${isIncome ? '+' : '-'}${NumberFormat.currency(symbol: '₹').format(transaction.amount)}',
                               style: TextStyle(
                                 color: isIncome
                                     ? Theme.of(context).colorScheme.primary
@@ -161,9 +148,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                 builder: (BuildContext context) {
                                   return AlertDialog(
                                     title: Text(
-                                        'Delete ${isIncome ? 'Income' : 'Expense'}'),
+                                      'Delete ${isIncome ? 'Income' : 'Expense'}',
+                                    ),
                                     content: Text(
-                                        'Are you sure you want to delete this ${isIncome ? 'income' : 'expense'}?'),
+                                      'Are you sure you want to delete this ${isIncome ? 'income' : 'expense'}?',
+                                    ),
                                     actions: [
                                       TextButton(
                                         onPressed: () {
@@ -196,7 +185,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           final result = await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => const AddTransactionScreen(),
+              builder: (context) =>
+                  const CalculatorTransactionScreen(initialType: 'expense'),
             ),
           );
           if (result == true) {

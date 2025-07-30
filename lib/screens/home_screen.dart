@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:expense_tracker/screens/dashboard_screen.dart';
 import 'package:expense_tracker/screens/budgets_screen.dart';
 import 'package:expense_tracker/screens/transactions_screen.dart';
-// import 'package:expense_tracker/screens/reports_screen.dart';
-import 'package:expense_tracker/screens/settings_screen.dart';
-import 'package:expense_tracker/screens/add_transaction_screen.dart';
+import 'package:expense_tracker/screens/reports_screen.dart';
+import 'package:expense_tracker/screens/categories_screen.dart';
+import 'package:expense_tracker/screens/calculator_transaction_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,8 +21,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     DashboardScreen(),
     TransactionsScreen(),
     BudgetsScreen(),
-    // ReportsScreen(),
-    SettingsScreen(),
+    ReportsScreen(),
+    CategoriesScreen(),
   ];
 
   @override
@@ -68,11 +68,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           _selectedIndex ==
               0 // Dashboard screen
           ? FloatingActionButton(
+              heroTag: 'dashboard_fab',
               onPressed: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const AddTransactionScreen(),
+                    builder: (context) => const CalculatorTransactionScreen(
+                      initialType: 'expense',
+                    ),
                   ),
                 );
               },
@@ -81,8 +84,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           : _selectedIndex ==
                 2 // Budgets screen
           ? FloatingActionButton(
+              heroTag: 'budget_fab',
               onPressed: () {
-                Navigator.pushNamed(context, '/budgets');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CalculatorTransactionScreen(
+                      initialType: 'expense',
+                    ),
+                  ),
+                );
               },
               child: const Icon(Icons.add),
             )
@@ -107,8 +118,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             label: 'Reports',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
+            icon: Icon(Icons.category),
+            label: 'Categories',
           ),
         ],
         currentIndex: _selectedIndex,

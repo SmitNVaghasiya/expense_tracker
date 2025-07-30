@@ -1,6 +1,7 @@
 import 'package:expense_tracker/models/transaction.dart';
 import 'package:expense_tracker/models/budget.dart';
 import 'package:expense_tracker/models/group.dart';
+import 'package:expense_tracker/models/account.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
@@ -8,6 +9,7 @@ class DataService {
   static const String _transactionsKey = 'transactions';
   static const String _budgetsKey = 'budgets';
   static const String _groupsKey = 'groups';
+  static const String _accountsKey = 'accounts';
 
   // Transaction methods
   static Future<List<Transaction>> getTransactions() async {
@@ -121,5 +123,62 @@ class DataService {
       groups.map((group) => group.toJson()).toList(),
     );
     await prefs.setString(_groupsKey, groupsJson);
+  }
+
+  // Account methods
+  static Future<List<Account>> getAccounts() async {
+    final prefs = await SharedPreferences.getInstance();
+    final accountsJson = prefs.getString(_accountsKey) ?? '[]';
+    final accountsList = json.decode(accountsJson) as List;
+    return accountsList.map((item) => Account.fromJson(item)).toList();
+  }
+
+  static Future<void> addAccount(Account account) async {
+    final accounts = await getAccounts();
+    accounts.add(account);
+    await _saveAccounts(accounts);
+  }
+
+  static Future<void> updateAccount(Account account) async {
+    final accounts = await getAccounts();
+    final index = accounts.indexWhere((element) => element.id == account.id);
+    if (index != -1) {
+      accounts[index] = account;
+      await _saveAccounts(accounts);
+    }
+  }
+
+  static Future<void> deleteAccount(String id) async {
+    final accounts = await getAccounts();
+    accounts.removeWhere((element) => element.id == id);
+    await _saveAccounts(accounts);
+  }
+
+  static Future<void> _saveAccounts(List<Account> accounts) async {
+    final prefs = await SharedPreferences.getInstance();
+    final accountsJson = json.encode(
+      accounts.map((account) => account.toJson()).toList(),
+    );
+    await prefs.setString(_accountsKey, accountsJson);
+  }
+
+  // Helper method to update account balance when transaction is added
+  static Future<void> updateAccountBalance(String accountId, double amount, String transactionType) async {
+    final accounts = await getAccounts();
+    final accountIndex = accounts.indexWhere((account) => account.id == accountId);
+    
+    if (accountIndex != -1) {
+      final account = accounts[accountIndex];
+      double newBalance = account.balance;
+      
+      if (transactionType == 'income') {
+        newBalance += amount;
+      } else if (transactionType == 'expense') {
+        newBalance -= amount;
+      }
+      
+      accounts[accountIndex] = account.copyWith(balance: newBalance);
+      await _saveAccounts(accounts);
+    }
   }
 }
