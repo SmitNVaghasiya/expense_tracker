@@ -4,9 +4,11 @@ class Transaction {
   final double amount;
   final DateTime date;
   final String category;
-  final String type; // 'expense' or 'income'
+  final String type; // 'expense', 'income', or 'transfer'
   final String? accountId; // Reference to the account
   final String? notes; // Optional notes
+  final String? transferId; // For transfer transactions - links the two transactions
+  final String? toAccountId; // For transfer transactions - destination account
 
   Transaction({
     required this.id,
@@ -17,6 +19,8 @@ class Transaction {
     required this.type,
     this.accountId,
     this.notes,
+    this.transferId,
+    this.toAccountId,
   });
 
   Transaction.fromJson(Map<String, dynamic> json)
@@ -27,7 +31,9 @@ class Transaction {
       category = json['category'],
       type = json['type'],
       accountId = json['accountId'],
-      notes = json['notes'];
+      notes = json['notes'],
+      transferId = json['transferId'],
+      toAccountId = json['toAccountId'];
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -38,5 +44,33 @@ class Transaction {
     'type': type,
     'accountId': accountId,
     'notes': notes,
+    'transferId': transferId,
+    'toAccountId': toAccountId,
   };
+
+  Transaction copyWith({
+    String? id,
+    String? title,
+    double? amount,
+    DateTime? date,
+    String? category,
+    String? type,
+    String? accountId,
+    String? notes,
+    String? transferId,
+    String? toAccountId,
+  }) {
+    return Transaction(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      amount: amount ?? this.amount,
+      date: date ?? this.date,
+      category: category ?? this.category,
+      type: type ?? this.type,
+      accountId: accountId ?? this.accountId,
+      notes: notes ?? this.notes,
+      transferId: transferId ?? this.transferId,
+      toAccountId: toAccountId ?? this.toAccountId,
+    );
+  }
 }

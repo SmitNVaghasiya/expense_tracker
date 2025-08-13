@@ -1,164 +1,187 @@
-import 'package:expense_tracker/models/transaction.dart';
-import 'package:expense_tracker/models/budget.dart';
-import 'package:expense_tracker/models/group.dart';
-import 'package:expense_tracker/models/account.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:spendwise/models/transaction.dart';
+import 'package:spendwise/models/budget.dart';
+import 'package:spendwise/models/group.dart';
+import 'package:spendwise/models/account.dart';
+import 'package:spendwise/services/database_service.dart';
+import 'package:sqflite/sqflite.dart' as sqflite;
 import 'dart:convert';
 
 class DataService {
-  static const String _transactionsKey = 'transactions';
-  static const String _budgetsKey = 'budgets';
-  static const String _groupsKey = 'groups';
-  static const String _accountsKey = 'accounts';
-
   // Transaction methods
   static Future<List<Transaction>> getTransactions() async {
-    final prefs = await SharedPreferences.getInstance();
-    final transactionsJson = prefs.getString(_transactionsKey) ?? '[]';
-    final transactionsList = json.decode(transactionsJson) as List;
-    return transactionsList.map((item) => Transaction.fromJson(item)).toList();
+    final dynamic result = await DatabaseService.getTransactions();
+    return List<Transaction>.from(result);
   }
 
   static Future<void> addTransaction(Transaction transaction) async {
-    final transactions = await getTransactions();
-    transactions.add(transaction);
-    await _saveTransactions(transactions);
+    // Use a single database connection for all operations
+    final db = await DatabaseService.database;
+    
+    try {
+      // Start a transaction for atomicity
+      await db.transaction((txn) async {
+        // Add transaction to database
+        await txn.insert(
+          'transactions',
+          transaction.toJson(),
+          conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
+        );
+
+        // Update account balance if account is specified - use direct query instead of fetching all accounts
+        if (transaction.accountId != null) {
+          await _updateAccountBalanceDirect(txn, transaction.accountId!, transaction.amount, transaction.type);
+        }
+      });
+    } catch (e) {
+      // If transaction fails, rethrow the error
+      rethrow;
+    }
   }
 
   static Future<void> updateTransaction(Transaction transaction) async {
-    final transactions = await getTransactions();
-    final index = transactions.indexWhere(
-      (element) => element.id == transaction.id,
-    );
-    if (index != -1) {
-      transactions[index] = transaction;
-      await _saveTransactions(transactions);
+    // Use a single database connection for all operations
+    final db = await DatabaseService.database;
+    
+    try {
+      // Start a transaction for atomicity
+      await db.transaction((txn) async {
+        // Get the old transaction to calculate balance difference
+        final oldTransaction = await _getTransactionByIdDirect(txn, transaction.id);
+
+        // Update transaction in database
+        await txn.update(
+          'transactions',
+          transaction.toJson(),
+          where: 'id = ?',
+          whereArgs: [transaction.id],
+        );
+
+        // Update account balance if account is specified
+        if (transaction.accountId != null) {
+          // Reverse the old transaction effect
+          if (oldTransaction != null && oldTransaction.accountId != null) {
+            await _updateAccountBalanceDirect(
+              txn,
+              oldTransaction.accountId!,
+              oldTransaction.amount,
+              oldTransaction.type,
+            );
+          }
+
+          // Apply the new transaction effect
+          await _updateAccountBalanceDirect(
+            txn,
+            transaction.accountId!,
+            transaction.amount,
+            transaction.type,
+          );
+        }
+      });
+    } catch (e) {
+      // If transaction fails, rethrow the error
+      rethrow;
     }
   }
 
   static Future<void> deleteTransaction(String id) async {
-    final transactions = await getTransactions();
-    transactions.removeWhere((element) => element.id == id);
-    await _saveTransactions(transactions);
+    // Use a single database connection for all operations
+    final db = await DatabaseService.database;
+    
+    try {
+      // Start a transaction for atomicity
+      await db.transaction((txn) async {
+        // Get the transaction being deleted to reverse its effect on account balance
+        final transactionToDelete = await _getTransactionByIdDirect(txn, id);
+
+        if (transactionToDelete != null && transactionToDelete.accountId != null) {
+          // Update account balance to reverse the transaction
+          await _updateAccountBalanceDirect(
+            txn,
+            transactionToDelete.accountId!,
+            transactionToDelete.amount,
+            transactionToDelete.type,
+          );
+        }
+
+        // Delete the transaction from database
+        await txn.delete('transactions', where: 'id = ?', whereArgs: [id]);
+      });
+    } catch (e) {
+      // If transaction fails, rethrow the error
+      rethrow;
+    }
   }
 
-  static Future<void> _saveTransactions(List<Transaction> transactions) async {
-    final prefs = await SharedPreferences.getInstance();
-    final transactionsJson = json.encode(
-      transactions.map((transaction) => transaction.toJson()).toList(),
-    );
-    await prefs.setString(_transactionsKey, transactionsJson);
+  static Future<Transaction?> getTransactionById(String id) async {
+    final transactions = await getTransactions();
+    try {
+      return transactions.firstWhere((transaction) => transaction.id == id);
+    } catch (e) {
+      return null;
+    }
   }
 
   // Budget methods
   static Future<List<Budget>> getBudgets() async {
-    final prefs = await SharedPreferences.getInstance();
-    final budgetsJson = prefs.getString(_budgetsKey) ?? '[]';
-    final budgetsList = json.decode(budgetsJson) as List;
-    return budgetsList.map((item) => Budget.fromJson(item)).toList();
+    return await DatabaseService.getBudgets();
   }
 
   static Future<void> addBudget(Budget budget) async {
-    final budgets = await getBudgets();
-    budgets.add(budget);
-    await _saveBudgets(budgets);
+    await DatabaseService.addBudget(budget);
   }
 
   static Future<void> updateBudget(Budget budget) async {
-    final budgets = await getBudgets();
-    final index = budgets.indexWhere((element) => element.id == budget.id);
-    if (index != -1) {
-      budgets[index] = budget;
-      await _saveBudgets(budgets);
-    }
+    await DatabaseService.updateBudget(budget);
   }
 
   static Future<void> deleteBudget(String id) async {
-    final budgets = await getBudgets();
-    budgets.removeWhere((element) => element.id == id);
-    await _saveBudgets(budgets);
-  }
-
-  static Future<void> _saveBudgets(List<Budget> budgets) async {
-    final prefs = await SharedPreferences.getInstance();
-    final budgetsJson = json.encode(
-      budgets.map((budget) => budget.toJson()).toList(),
-    );
-    await prefs.setString(_budgetsKey, budgetsJson);
+    await DatabaseService.deleteBudget(id);
   }
 
   // Group methods
   static Future<List<Group>> getGroups() async {
-    final prefs = await SharedPreferences.getInstance();
-    final groupsJson = prefs.getString(_groupsKey) ?? '[]';
-    final groupsList = json.decode(groupsJson) as List;
-    return groupsList.map((item) => Group.fromJson(item)).toList();
+    return await DatabaseService.getGroups();
   }
 
   static Future<void> addGroup(Group group) async {
-    final groups = await getGroups();
-    groups.add(group);
-    await _saveGroups(groups);
+    await DatabaseService.addGroup(group);
   }
 
   static Future<void> updateGroup(Group group) async {
-    final groups = await getGroups();
-    final index = groups.indexWhere((element) => element.id == group.id);
-    if (index != -1) {
-      groups[index] = group;
-      await _saveGroups(groups);
-    }
+    await DatabaseService.updateGroup(group);
   }
 
   static Future<void> deleteGroup(String id) async {
-    final groups = await getGroups();
-    groups.removeWhere((element) => element.id == id);
-    await _saveGroups(groups);
-  }
-
-  static Future<void> _saveGroups(List<Group> groups) async {
-    final prefs = await SharedPreferences.getInstance();
-    final groupsJson = json.encode(
-      groups.map((group) => group.toJson()).toList(),
-    );
-    await prefs.setString(_groupsKey, groupsJson);
+    await DatabaseService.deleteGroup(id);
   }
 
   // Account methods
   static Future<List<Account>> getAccounts() async {
-    final prefs = await SharedPreferences.getInstance();
-    final accountsJson = prefs.getString(_accountsKey) ?? '[]';
-    final accountsList = json.decode(accountsJson) as List;
-    return accountsList.map((item) => Account.fromJson(item)).toList();
+    return await DatabaseService.getAccounts();
   }
 
   static Future<void> addAccount(Account account) async {
-    final accounts = await getAccounts();
-    accounts.add(account);
-    await _saveAccounts(accounts);
+    await DatabaseService.addAccount(account);
   }
 
   static Future<void> updateAccount(Account account) async {
-    final accounts = await getAccounts();
-    final index = accounts.indexWhere((element) => element.id == account.id);
-    if (index != -1) {
-      accounts[index] = account;
-      await _saveAccounts(accounts);
-    }
+    await DatabaseService.updateAccount(account);
   }
 
   static Future<void> deleteAccount(String id) async {
-    final accounts = await getAccounts();
-    accounts.removeWhere((element) => element.id == id);
-    await _saveAccounts(accounts);
-  }
+    // Get all transactions for this account
+    final transactions = await getTransactions();
+    final accountTransactions = transactions
+        .where((t) => t.accountId == id)
+        .toList();
 
-  static Future<void> _saveAccounts(List<Account> accounts) async {
-    final prefs = await SharedPreferences.getInstance();
-    final accountsJson = json.encode(
-      accounts.map((account) => account.toJson()).toList(),
-    );
-    await prefs.setString(_accountsKey, accountsJson);
+    // Delete all transactions for this account
+    for (final transaction in accountTransactions) {
+      await DatabaseService.deleteTransaction(transaction.id);
+    }
+
+    // Delete the account
+    await DatabaseService.deleteAccount(id);
   }
 
   // Helper method to update account balance when transaction is added
@@ -182,8 +205,35 @@ class DataService {
         newBalance -= amount;
       }
 
-      accounts[accountIndex] = account.copyWith(balance: newBalance);
-      await _saveAccounts(accounts);
+      final updatedAccount = account.copyWith(balance: newBalance);
+      await DatabaseService.updateAccount(updatedAccount);
+    }
+  }
+
+  // Helper method to reverse account balance when transaction is deleted or updated
+  static Future<void> reverseAccountBalance(
+    String accountId,
+    double amount,
+    String transactionType,
+  ) async {
+    final accounts = await getAccounts();
+    final accountIndex = accounts.indexWhere(
+      (account) => account.id == accountId,
+    );
+
+    if (accountIndex != -1) {
+      final account = accounts[accountIndex];
+      double newBalance = account.balance;
+
+      // Reverse the transaction effect
+      if (transactionType == 'income') {
+        newBalance -= amount; // Remove income
+      } else if (transactionType == 'expense') {
+        newBalance += amount; // Add back expense
+      }
+
+      final updatedAccount = account.copyWith(balance: newBalance);
+      await DatabaseService.updateAccount(updatedAccount);
     }
   }
 
@@ -202,33 +252,167 @@ class DataService {
     return account.name;
   }
 
+  // Data export methods
+  static Future<String> exportTransactionsToJson() async {
+    final transactions = await getTransactions();
+    return json.encode(transactions.map((t) => t.toJson()).toList());
+  }
+
+  static Future<String> exportAccountsToJson() async {
+    final accounts = await getAccounts();
+    return json.encode(accounts.map((a) => a.toJson()).toList());
+  }
+
+  static Future<String> exportBudgetsToJson() async {
+    final budgets = await getBudgets();
+    return json.encode(budgets.map((b) => b.toJson()).toList());
+  }
+
+  static Future<String> exportGroupsToJson() async {
+    final groups = await getGroups();
+    return json.encode(groups.map((g) => g.toJson()).toList());
+  }
+
+  // Data import methods
+  static Future<void> importTransactionsFromJson(String jsonData) async {
+    final List<dynamic> data = json.decode(jsonData);
+    for (final item in data) {
+      final transaction = Transaction.fromJson(item);
+      await addTransaction(transaction);
+    }
+  }
+
+  static Future<void> importAccountsFromJson(String jsonData) async {
+    final List<dynamic> data = json.decode(jsonData);
+    for (final item in data) {
+      final account = Account.fromJson(item);
+      await addAccount(account);
+    }
+  }
+
+  static Future<void> importBudgetsFromJson(String jsonData) async {
+    final List<dynamic> data = json.decode(jsonData);
+    for (final item in data) {
+      final budget = Budget.fromJson(item);
+      await addBudget(budget);
+    }
+  }
+
+  static Future<void> importGroupsFromJson(String jsonData) async {
+    final List<dynamic> data = json.decode(jsonData);
+    for (final item in data) {
+      final group = Group.fromJson(item);
+      await addGroup(group);
+    }
+  }
+
   // Clear all data
   static Future<void> clearAllData() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_transactionsKey);
-    await prefs.remove(_budgetsKey);
-    await prefs.remove(_groupsKey);
-    await prefs.remove(_accountsKey);
+    await DatabaseService.clearAllData();
   }
 
   // Clear specific data types
   static Future<void> clearAllTransactions() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_transactionsKey);
+    final db = await DatabaseService.database;
+    await db.delete('transactions');
   }
 
   static Future<void> clearAllBudgets() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_budgetsKey);
+    final db = await DatabaseService.database;
+    await db.delete('budgets');
   }
 
   static Future<void> clearAllAccounts() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_accountsKey);
+    final db = await DatabaseService.database;
+    await db.delete('accounts');
   }
 
   static Future<void> clearAllGroups() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_groupsKey);
+    final db = await DatabaseService.database;
+    await db.delete('groups');
+  }
+
+  // Recalculate all account balances based on transactions
+  static Future<void> recalculateAllAccountBalances() async {
+    final accounts = await getAccounts();
+    final transactions = await getTransactions();
+
+    // Create a map to store calculated balances
+    final Map<String, double> calculatedBalances = {};
+
+    // Initialize all accounts with 0 balance
+    for (final account in accounts) {
+      calculatedBalances[account.id] = 0.0;
+    }
+
+    // Calculate balances from transactions
+    for (final transaction in transactions) {
+      if (transaction.accountId != null) {
+        final currentBalance = calculatedBalances[transaction.accountId] ?? 0.0;
+
+        if (transaction.type == 'income') {
+          calculatedBalances[transaction.accountId!] =
+              currentBalance + transaction.amount;
+        } else if (transaction.type == 'expense') {
+          calculatedBalances[transaction.accountId!] =
+              currentBalance - transaction.amount;
+        }
+      }
+    }
+
+    // Update all accounts with calculated balances
+    for (final account in accounts) {
+      final newBalance = calculatedBalances[account.id] ?? 0.0;
+      final updatedAccount = account.copyWith(balance: newBalance);
+      await DatabaseService.updateAccount(updatedAccount);
+    }
+  }
+
+  // Helper method to update account balance directly without fetching all accounts
+  static Future<void> _updateAccountBalanceDirect(
+    sqflite.Transaction txn,
+    String accountId,
+    double amount,
+    String transactionType,
+  ) async {
+    // Use a direct SQL query to update the account balance
+    final sql = '''
+      UPDATE accounts 
+      SET balance = CASE 
+        WHEN ? = 'income' THEN balance + ?
+        WHEN ? = 'expense' THEN balance - ?
+        ELSE balance
+      END
+      WHERE id = ?
+    ''';
+    
+    await txn.rawUpdate(sql, [transactionType, amount, transactionType, amount, accountId]);
+  }
+
+  // Helper method to get transaction by ID directly from transaction context
+  static Future<Transaction?> _getTransactionByIdDirect(
+    sqflite.Transaction txn,
+    String id,
+  ) async {
+    final List<Map<String, dynamic>> maps = await txn.query(
+      'transactions',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    
+    if (maps.isEmpty) return null;
+    
+    return Transaction(
+      id: maps[0]['id'],
+      title: maps[0]['title'],
+      amount: maps[0]['amount'],
+      date: DateTime.parse(maps[0]['date']),
+      category: maps[0]['category'],
+      type: maps[0]['type'],
+      accountId: maps[0]['accountId'],
+      notes: maps[0]['notes'],
+      transferId: maps[0]['transferId'],
+      toAccountId: maps[0]['toAccountId'],
+    );
   }
 }

@@ -20,6 +20,7 @@ class Loan {
   final List<LoanPayment> paymentHistory; // History of payments made
   final bool autoDeduct; // Whether to automatically deduct from account
   final DateTime? nextPaymentDate; // Next scheduled payment date
+  final DateTime createdAt; // When the loan was created
 
   Loan({
     String? id,
@@ -38,7 +39,9 @@ class Loan {
     this.paymentHistory = const [],
     this.autoDeduct = false,
     this.nextPaymentDate,
-  }) : id = id ?? const Uuid().v4();
+    DateTime? createdAt,
+  }) : id = id ?? const Uuid().v4(),
+       createdAt = createdAt ?? DateTime.now();
 
   // Get remaining amount to be paid
   double get remainingAmount => amount - paidAmount;
@@ -78,9 +81,9 @@ class Loan {
       'paymentDay': paymentDay,
       'monthlyPayment': monthlyPayment,
       'paidAmount': paidAmount,
-      'paymentHistory': paymentHistory.map((p) => p.toJson()).toList(),
-      'autoDeduct': autoDeduct,
+      'autoDeduct': autoDeduct ? 1 : 0,
       'nextPaymentDate': nextPaymentDate?.toIso8601String(),
+      'createdAt': createdAt.toIso8601String(),
     };
   }
 
@@ -99,12 +102,13 @@ class Loan {
       paymentDay: json['paymentDay'],
       monthlyPayment: json['monthlyPayment'],
       paidAmount: json['paidAmount'] ?? 0.0,
+      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : DateTime.now(),
       paymentHistory:
           (json['paymentHistory'] as List?)
               ?.map((p) => LoanPayment.fromJson(p))
               .toList() ??
           [],
-      autoDeduct: json['autoDeduct'] ?? false,
+      autoDeduct: json['autoDeduct'] == 1 || json['autoDeduct'] == true,
       nextPaymentDate: json['nextPaymentDate'] != null
           ? DateTime.parse(json['nextPaymentDate'])
           : null,
@@ -128,6 +132,7 @@ class Loan {
     List<LoanPayment>? paymentHistory,
     bool? autoDeduct,
     DateTime? nextPaymentDate,
+    DateTime? createdAt,
   }) {
     return Loan(
       id: id ?? this.id,
@@ -146,6 +151,7 @@ class Loan {
       paymentHistory: paymentHistory ?? this.paymentHistory,
       autoDeduct: autoDeduct ?? this.autoDeduct,
       nextPaymentDate: nextPaymentDate ?? this.nextPaymentDate,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 }

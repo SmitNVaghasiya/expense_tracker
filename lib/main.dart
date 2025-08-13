@@ -1,31 +1,29 @@
 import 'package:flutter/material.dart';
-import 'package:expense_tracker/screens/home_screen.dart';
-import 'package:expense_tracker/screens/expenses_screen.dart';
-import 'package:expense_tracker/screens/income_screen.dart';
-import 'package:expense_tracker/screens/budgets_screen.dart';
-import 'package:expense_tracker/screens/reports_screen.dart';
-import 'package:expense_tracker/screens/accounts_screen.dart';
-import 'package:expense_tracker/screens/import_export_screen.dart';
-import 'package:expense_tracker/screens/theme_selection_screen.dart';
-import 'package:expense_tracker/screens/currency_selection_screen.dart';
-import 'package:expense_tracker/screens/backup_restore_screen.dart';
-import 'package:expense_tracker/screens/delete_reset_screen.dart';
-import 'package:expense_tracker/screens/help_screen.dart';
-import 'package:expense_tracker/screens/feedback_screen.dart';
-import 'package:expense_tracker/screens/reminder_settings_screen.dart';
-import 'package:expense_tracker/screens/loans_screen.dart';
-import 'package:expense_tracker/services/theme_provider.dart';
-import 'package:expense_tracker/services/currency_provider.dart';
-import 'package:expense_tracker/services/reminder_service.dart';
+import 'package:flutter/services.dart';
+import 'package:spendwise/screens/index.dart';
+import 'package:spendwise/services/index.dart';
 import 'package:provider/provider.dart';
 
-void main() {
+void main() async {
+  // Ensure Flutter bindings are initialized
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize notifications
+  await BillReminderService.initializeNotifications();
+
+  // Set preferred orientations
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => ThemeProvider()),
         ChangeNotifierProvider(create: (context) => CurrencyProvider()),
         ChangeNotifierProvider(create: (context) => ReminderService()),
+        ChangeNotifierProvider(create: (context) => AppState()),
       ],
       child: const ExpenseTrackerApp(),
     ),
@@ -40,7 +38,7 @@ class ExpenseTrackerApp extends StatelessWidget {
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
         return MaterialApp(
-          title: 'Budget Tracker',
+          title: 'SpendWise',
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
               seedColor: Colors.blue,
@@ -48,6 +46,23 @@ class ExpenseTrackerApp extends StatelessWidget {
               secondary: Colors.orange,
             ),
             useMaterial3: true,
+            // Fix pixel issues with better scaling
+            visualDensity: VisualDensity.adaptivePlatformDensity,
+            // Ensure proper text scaling
+            textTheme: Theme.of(context).textTheme.apply(
+              bodyColor: Colors.black87,
+              displayColor: Colors.black87,
+            ),
+            // Fix floating action button positioning
+            floatingActionButtonTheme: const FloatingActionButtonThemeData(
+              elevation: 6.0,
+              shape: CircleBorder(),
+            ),
+            // Fix bottom navigation bar
+            bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+              type: BottomNavigationBarType.fixed,
+              elevation: 8.0,
+            ),
           ),
           darkTheme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
@@ -57,35 +72,42 @@ class ExpenseTrackerApp extends StatelessWidget {
               secondary: Colors.orange,
             ),
             useMaterial3: true,
-            scaffoldBackgroundColor: const Color(
-              0xFF2C2C2C,
-            ), // Light grey background
-            cardColor: const Color(0xFF3A3A3A), // Medium grey cards
+            visualDensity: VisualDensity.adaptivePlatformDensity,
+            scaffoldBackgroundColor: const Color(0xFF2C2C2C),
+            cardColor: const Color(0xFF3A3A3A),
             appBarTheme: const AppBarTheme(
-              backgroundColor: Color(0xFF3A3A3A), // Medium grey app bar
+              backgroundColor: Color(0xFF3A3A3A),
               foregroundColor: Colors.white,
               elevation: 0,
             ),
             drawerTheme: const DrawerThemeData(
-              backgroundColor: Color(0xFF3A3A3A), // Medium grey drawer
+              backgroundColor: Color(0xFF3A3A3A),
             ),
             bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-              backgroundColor: Color(0xFF3A3A3A), // Medium grey bottom nav
+              backgroundColor: Color(0xFF3A3A3A),
               selectedItemColor: Colors.blue,
               unselectedItemColor: Colors.grey,
+              type: BottomNavigationBarType.fixed,
+              elevation: 8.0,
             ),
             cardTheme: const CardThemeData(
-              color: Color(0xFF3A3A3A), // Medium grey cards
+              color: Color(0xFF3A3A3A),
               elevation: 2,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.all(Radius.circular(12)),
               ),
             ),
-            dividerTheme: const DividerThemeData(
-              color: Color(0xFF4A4A4A), // Light grey dividers
-            ),
+            dividerTheme: const DividerThemeData(color: Color(0xFF4A4A4A)),
             listTileTheme: const ListTileThemeData(
-              tileColor: Color(0xFF3A3A3A), // Medium grey list tiles
+              tileColor: Color(0xFF3A3A3A),
+            ),
+            floatingActionButtonTheme: const FloatingActionButtonThemeData(
+              elevation: 6.0,
+              shape: CircleBorder(),
+            ),
+            textTheme: Theme.of(context).textTheme.apply(
+              bodyColor: Colors.white,
+              displayColor: Colors.white,
             ),
           ),
           themeMode: themeProvider.themeMode,

@@ -7,7 +7,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:expense_tracker/main.dart';
+import 'package:spendwise/main.dart';
 
 void main() {
   testWidgets('App loads successfully', (WidgetTester tester) async {
