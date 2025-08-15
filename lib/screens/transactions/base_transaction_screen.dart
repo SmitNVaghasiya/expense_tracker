@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:spendwise/models/transaction.dart';
 import 'package:spendwise/models/account.dart';
-import 'package:spendwise/services/data_service.dart';
+
 import 'package:spendwise/services/app_state.dart';
 import 'package:spendwise/widgets/common/index.dart' as common_widgets;
 import 'package:spendwise/core/performance_mixins.dart';
-import 'package:spendwise/widgets/common/optimized_widgets.dart';
-import 'package:spendwise/widgets/common/optimized_list_view.dart';
+
 import 'package:spendwise/screens/transactions/calculator_transaction_screen.dart';
 import 'package:spendwise/widgets/common/display_options_dialog.dart';
 import 'package:intl/intl.dart';
@@ -36,7 +35,6 @@ class _BaseTransactionScreenState extends State<BaseTransactionScreen>
   late final ValueNotifier<DateTime?> _endDateNotifier;
   late final ValueNotifier<bool> _isLoadingNotifier;
 
-  List<Account> _accounts = [];
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -80,12 +78,12 @@ class _BaseTransactionScreenState extends State<BaseTransactionScreen>
           _transactionsNotifier.value = transactions
               .where((t) => t.type == widget.transactionType)
               .toList();
-          _accounts = accounts;
+
           _applyFilters();
         });
       }
     } catch (e) {
-      print('Error loading ${widget.transactionType}s: $e');
+      debugPrint('Error loading ${widget.transactionType}s: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -147,17 +145,6 @@ class _BaseTransactionScreenState extends State<BaseTransactionScreen>
 
   void _onCategoryChanged(String category) {
     _selectedCategoryNotifier.value = category;
-    _applyFilters();
-  }
-
-  void _onDateRangeChanged(DateTimeRange? range) {
-    if (range != null) {
-      _startDateNotifier.value = range.start;
-      _endDateNotifier.value = range.end;
-    } else {
-      _startDateNotifier.value = null;
-      _endDateNotifier.value = null;
-    }
     _applyFilters();
   }
 
@@ -386,9 +373,9 @@ class _BaseTransactionScreenState extends State<BaseTransactionScreen>
       onViewModeChanged: (mode) {
         // Handle view mode changes if needed
         // For now, we'll just show a snackbar
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('View mode changed to: $mode')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('View mode changed to: $mode')));
       },
       onShowTotalChanged: (value) {
         // Handle show total changes if needed
@@ -442,8 +429,8 @@ class _BaseTransactionScreenState extends State<BaseTransactionScreen>
                 _endDateNotifier.value = date;
                 _applyFilters();
               },
-              firstDate: DateTime(2020),
-              lastDate: DateTime.now(),
+              firstDate: DateTime(1800),
+              lastDate: DateTime.now().add(const Duration(days: 36500)),
             ),
           ],
         ),

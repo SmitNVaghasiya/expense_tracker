@@ -1,63 +1,63 @@
-class Account {
+class Category {
   final String id;
   final String name;
-  final double balance;
-  final String type; // 'cash', 'bank', 'credit', etc.
-  final String? icon; // Optional icon identifier
-  final double? limit; // Optional spending limit
+  final String type; // 'income', 'expense', 'transfer'
+  final String icon; // Icon identifier
+  final String color; // Color hex string
   final DateTime createdAt;
+  final bool isDefault; // Whether it's a system default category
 
-  Account({
+  Category({
     required this.id,
     required this.name,
-    required this.balance,
     required this.type,
-    this.icon,
-    this.limit,
+    required this.icon,
+    required this.color,
     required this.createdAt,
+    this.isDefault = false,
   });
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
       'name': name,
-      'balance': balance,
       'type': type,
       'icon': icon,
-      'limit': limit,
+      'color': color,
       'createdAt': createdAt.toIso8601String(),
+      'isDefault': isDefault ? 1 : 0,
     };
   }
 
-  factory Account.fromJson(Map<String, dynamic> json) {
-    return Account(
+  factory Category.fromJson(Map<String, dynamic> json) {
+    return Category(
       id: json['id'],
       name: json['name'],
-      balance: json['balance'].toDouble(),
       type: json['type'],
       icon: json['icon'],
-      limit: json['limit']?.toDouble(),
+      color: json['color'],
       createdAt: DateTime.parse(json['createdAt']),
+      isDefault: json['isDefault'] == 1,
     );
   }
 
-  Account copyWith({
+  Category copyWith({
     String? id,
     String? name,
-    double? balance,
     String? type,
     String? icon,
-    double? limit,
+    String? color,
     DateTime? createdAt,
+    bool? isDefault,
   }) {
-    return Account(
+    return Category(
       id: id ?? this.id,
       name: name ?? this.name,
-      balance: balance ?? this.balance,
       type: type ?? this.type,
       icon: icon ?? this.icon,
-      limit: limit ?? this.limit,
+      color: color ?? this.color,
       createdAt: createdAt ?? this.createdAt,
+      isDefault: isDefault ?? this.isDefault,
     );
   }
 }

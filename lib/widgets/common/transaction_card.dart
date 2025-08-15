@@ -82,41 +82,47 @@ class TransactionCard extends StatelessWidget {
                           transaction.title,
                           style: TextStyle(
                             fontSize: isCompact ? 14 : 16,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.bold,
                             color: Theme.of(context).colorScheme.onSurface,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                        if (!isCompact) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            transaction.category,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withOpacity(0.7),
-                            ),
+                        if (accountName != null)
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.account_balance_wallet,
+                                size: 12,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.6),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                accountName!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.6),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                        if (accountName != null && !isCompact) ...[
-                          const SizedBox(height: 2),
+                        if (!isCompact)
                           Text(
-                            accountName!,
+                            DateFormat('MMM dd, yyyy').format(transaction.date),
                             style: TextStyle(
                               fontSize: 11,
                               color: Theme.of(
                                 context,
-                              ).colorScheme.onSurface.withOpacity(0.6),
+                              ).colorScheme.onSurface.withOpacity(0.5),
                             ),
                           ),
-                        ],
                       ],
                     ),
                   ),
 
-                  // Amount and Date
+                  // Transaction Amount
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -125,45 +131,52 @@ class TransactionCard extends StatelessWidget {
                             ? '-'
                             : isIncome
                             ? '+'
-                            : ''}${NumberFormat.currency(symbol: '\$', decimalDigits: 2).format(transaction.amount)}',
+                            : ''}${NumberFormat.currency(symbol: '₹', decimalDigits: 2).format(transaction.amount)}',
                         style: TextStyle(
                           fontSize: isCompact ? 14 : 16,
                           fontWeight: FontWeight.bold,
                           color: getTransactionColor(),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        DateFormat('MMM dd').format(transaction.date),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.6),
+                      if (!isCompact)
+                        Text(
+                          transaction.notes?.isNotEmpty == true
+                              ? transaction.notes!
+                              : 'No notes',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
                     ],
                   ),
                 ],
               ),
 
               // Actions Row
-              if (showActions && (onEdit != null || onDelete != null)) ...[
-                const SizedBox(height: 12),
+              if (showActions && !isCompact) ...[
+                const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     if (onEdit != null)
                       TextButton.icon(
                         onPressed: onEdit,
-                        icon: const Icon(Icons.edit, size: 16),
-                        label: const Text('Edit'),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
+                        icon: Icon(
+                          Icons.edit,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        label: Text(
+                          'Edit',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.primary,
                           ),
-                          minimumSize: const Size(0, 0),
                         ),
                       ),
                     if (onEdit != null && onDelete != null)
@@ -171,15 +184,17 @@ class TransactionCard extends StatelessWidget {
                     if (onDelete != null)
                       TextButton.icon(
                         onPressed: onDelete,
-                        icon: const Icon(Icons.delete, size: 16),
-                        label: const Text('Delete'),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
+                        icon: Icon(
+                          Icons.delete,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        label: Text(
+                          'Delete',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.error,
                           ),
-                          minimumSize: const Size(0, 0),
-                          foregroundColor: Colors.red,
                         ),
                       ),
                   ],

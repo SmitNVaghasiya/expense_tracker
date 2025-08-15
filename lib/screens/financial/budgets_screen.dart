@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:spendwise/models/budget.dart';
-import 'package:spendwise/models/transaction.dart';
+import 'package:spendwise/models/overall_budget.dart';
 import 'package:spendwise/services/data_service.dart';
+import 'package:spendwise/services/category_service.dart';
+import 'package:spendwise/services/warning_preferences_service.dart';
+import 'package:spendwise/widgets/common/index.dart' as common_widgets;
+import 'package:spendwise/models/category.dart';
+import 'package:uuid/uuid.dart';
+import 'package:spendwise/models/transaction.dart';
 import 'package:spendwise/services/budget_service.dart';
 import 'package:spendwise/screens/financial/base_financial_screen.dart';
 import 'package:spendwise/core/performance_mixins.dart';
@@ -24,10 +30,15 @@ class _BudgetsScreenState extends State<BudgetsScreen>
     with ValueNotifierMixin, EfficientListMixin, ScrollPerformanceMixin {
   // ValueNotifiers for efficient state management
   late final ValueNotifier<List<Budget>> _budgetsNotifier;
+  late final ValueNotifier<List<OverallBudget>> _overallBudgetsNotifier;
   late final ValueNotifier<List<Transaction>> _transactionsNotifier;
   late final ValueNotifier<DateTime> _selectedMonthNotifier;
   late final ValueNotifier<double> _totalBudgetNotifier;
+  late final ValueNotifier<double> _overallBudgetLimitNotifier;
   late final ValueNotifier<double> _totalSpentNotifier;
+  late final ValueNotifier<double> _totalIncomeNotifier;
+  late final ValueNotifier<double> _salaryIncomeNotifier;
+  late final ValueNotifier<double> _effectiveIncomeNotifier;
   late final ValueNotifier<List<Map<String, dynamic>>> _budgetAlertsNotifier;
   late final ValueNotifier<List<Map<String, dynamic>>>
   _budgetRecommendationsNotifier;
@@ -303,16 +314,20 @@ class _BudgetsScreenState extends State<BudgetsScreen>
 
   void _initializeNotifiers() {
     _budgetsNotifier = getNotifier('budgets', []);
+    _overallBudgetsNotifier = getNotifier('overallBudgets', []);
     _transactionsNotifier = getNotifier('transactions', []);
     _selectedMonthNotifier = getNotifier('selectedMonth', DateTime.now());
     _totalBudgetNotifier = getNotifier('totalBudget', 0.0);
+    _overallBudgetLimitNotifier = getNotifier('overallBudgetLimit', 0.0);
     _totalSpentNotifier = getNotifier('totalSpent', 0.0);
+    _totalIncomeNotifier = getNotifier('totalIncome', 0.0);
+    _salaryIncomeNotifier = getNotifier('salaryIncome', 0.0);
+    _effectiveIncomeNotifier = getNotifier('effectiveIncome', 0.0);
     _budgetAlertsNotifier = getNotifier('budgetAlerts', []);
     _budgetRecommendationsNotifier = getNotifier('budgetRecommendations', []);
     _isLoadingNotifier = getNotifier('isLoading', false);
   }
 
-  @override
   Future<void> _loadData() async {
     _isLoadingNotifier.value = true;
 
@@ -320,11 +335,13 @@ class _BudgetsScreenState extends State<BudgetsScreen>
 
     try {
       final budgets = await DataService.getBudgets();
+      final overallBudgets = await DataService.getOverallBudgets();
       final transactions = await DataService.getTransactions();
 
       if (mounted) {
         setState(() {
           _budgetsNotifier.value = budgets;
+          _overallBudgetsNotifier.value = overallBudgets;
           _transactionsNotifier.value = transactions;
           _calculateTotals();
         });
@@ -371,22 +388,62 @@ class _BudgetsScreenState extends State<BudgetsScreen>
       (sum, budget) => sum + budget.limit,
     );
 
+    // Get overall budget for the month
+    final monthOverallBudgets = _overallBudgetsNotifier.value
+        .where(
+          (budget) =>
+              budget.startDate.year == _selectedMonthNotifier.value.year &&
+              budget.startDate.month == _selectedMonthNotifier.value.month &&
+              budget.isActive,
+        )
+        .toList();
+
+    double overallBudgetLimit = 0.0;
+    if (monthOverallBudgets.isNotEmpty) {
+      overallBudgetLimit = monthOverallBudgets.first.limit;
+    }
+
     final monthTransactions = _transactionsNotifier.value
         .where(
           (transaction) =>
               transaction.date.year == _selectedMonthNotifier.value.year &&
-              transaction.date.month == _selectedMonthNotifier.value.month &&
-              transaction.type == 'expense',
+              transaction.date.month == _selectedMonthNotifier.value.month,
         )
         .toList();
 
-    final totalSpent = monthTransactions.fold(
+    final monthExpenses = monthTransactions
+        .where((transaction) => transaction.type == 'expense')
+        .toList();
+
+    final monthIncome = monthTransactions
+        .where((transaction) => transaction.type == 'income')
+        .toList();
+
+    final totalSpent = monthExpenses.fold(
       0.0,
       (sum, transaction) => sum + transaction.amount,
     );
 
+    // Calculate income
+    double totalIncome = 0.0;
+    double salaryIncome = 0.0;
+
+    for (final transaction in monthIncome) {
+      totalIncome += transaction.amount;
+      if (transaction.category.toLowerCase() == 'salary') {
+        salaryIncome += transaction.amount;
+      }
+    }
+
+    // Use salary income if available, otherwise use total income
+    final effectiveIncome = salaryIncome > 0 ? salaryIncome : totalIncome;
+
     _totalBudgetNotifier.value = totalBudget;
+    _overallBudgetLimitNotifier.value = overallBudgetLimit;
     _totalSpentNotifier.value = totalSpent;
+    _totalIncomeNotifier.value = totalIncome;
+    _salaryIncomeNotifier.value = salaryIncome;
+    _effectiveIncomeNotifier.value = effectiveIncome;
   }
 
   @override
@@ -418,6 +475,10 @@ class _BudgetsScreenState extends State<BudgetsScreen>
                     _buildBudgetOverviewSection(),
                     const SizedBox(height: 24),
 
+                    // Budget Summary Section
+                    _buildBudgetSummarySection(),
+                    const SizedBox(height: 24),
+
                     // Budget Alerts Section
                     if (_budgetAlertsNotifier.value.isNotEmpty) ...[
                       _buildBudgetAlertsSection(),
@@ -429,6 +490,10 @@ class _BudgetsScreenState extends State<BudgetsScreen>
                       _buildBudgetRecommendationsSection(),
                       const SizedBox(height: 24),
                     ],
+
+                    // Budget Insights Section
+                    _buildBudgetInsightsSection(),
+                    const SizedBox(height: 24),
 
                     // Categories with Budgets Section
                     _buildCategoriesWithBudgetsSection(),
@@ -482,9 +547,11 @@ class _BudgetsScreenState extends State<BudgetsScreen>
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
+                      color: Colors.blue.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                      border: Border.all(
+                        color: Colors.blue.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -529,9 +596,11 @@ class _BudgetsScreenState extends State<BudgetsScreen>
                     _selectedMonthNotifier.value.month != DateTime.now().month)
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
+                      color: Colors.green.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.green.withOpacity(0.3)),
+                      border: Border.all(
+                        color: Colors.green.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: TextButton.icon(
                       onPressed: () {
@@ -576,9 +645,21 @@ class _BudgetsScreenState extends State<BudgetsScreen>
           children: [
             Expanded(
               child: _buildBudgetMetricCard(
-                'TOTAL BUDGET',
+                'CATEGORY BUDGETS',
                 _totalBudgetNotifier.value,
                 Colors.blue,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildBudgetMetricCard(
+                'OVERALL BUDGET',
+                _overallBudgetLimitNotifier.value,
+                Colors.green,
+                onTap: _overallBudgetLimitNotifier.value > 0
+                    ? _showEditOverallBudgetDialog
+                    : _showSetOverallBudgetDialog,
+                showSetButton: _overallBudgetLimitNotifier.value == 0,
               ),
             ),
             const SizedBox(width: 12),
@@ -591,6 +672,35 @@ class _BudgetsScreenState extends State<BudgetsScreen>
             ),
           ],
         ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildBudgetMetricCard(
+                'MONTHLY INCOME',
+                _effectiveIncomeNotifier.value,
+                Colors.green,
+                showIncomeSource: true,
+                incomeSource: _salaryIncomeNotifier.value > 0
+                    ? 'Salary'
+                    : 'All Income',
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildBudgetMetricCard(
+                'REMAINING',
+                _effectiveIncomeNotifier.value - _totalSpentNotifier.value,
+                _effectiveIncomeNotifier.value - _totalSpentNotifier.value < 0
+                    ? Colors.red
+                    : Colors.green,
+                showRemainingStatus: true,
+                isOverIncome:
+                    _totalSpentNotifier.value > _effectiveIncomeNotifier.value,
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -599,8 +709,8 @@ class _BudgetsScreenState extends State<BudgetsScreen>
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _selectedMonthNotifier.value,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      firstDate: DateTime(1800),
+      lastDate: DateTime.now().add(const Duration(days: 36500)),
       initialDatePickerMode: DatePickerMode.year,
       builder: (context, child) {
         return Theme(
@@ -625,7 +735,239 @@ class _BudgetsScreenState extends State<BudgetsScreen>
     }
   }
 
-  Widget _buildBudgetMetricCard(String title, double amount, Color color) {
+  Widget _buildBudgetMetricCard(
+    String title,
+    double amount,
+    Color color, {
+    Function()? onTap,
+    bool showSetButton = false,
+    bool showIncomeSource = false,
+    String? incomeSource,
+    bool showRemainingStatus = false,
+    bool isOverIncome = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            NumberFormat.currency(symbol: '₹').format(amount),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          if (showIncomeSource && incomeSource != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              incomeSource,
+              style: TextStyle(
+                fontSize: 10,
+                color: color.withValues(alpha: 0.7),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+          if (showRemainingStatus) ...[
+            const SizedBox(height: 4),
+            Text(
+              isOverIncome ? 'Over Income' : 'Within Income',
+              style: TextStyle(
+                fontSize: 10,
+                color: isOverIncome ? Colors.red : Colors.green,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+          if (showSetButton)
+            TextButton(
+              onPressed: onTap,
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.primary,
+              ),
+              child: const Text('SET BUDGET'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showSetOverallBudgetDialog() {
+    final amountController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Set Overall Budget for ${DateFormat('MMMM yyyy').format(_selectedMonthNotifier.value)}',
+        ),
+        content: TextField(
+          controller: amountController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Overall Budget Amount',
+            hintText: '0.00',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (amountController.text.isNotEmpty) {
+                final overallBudget = OverallBudget(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  limit: double.tryParse(amountController.text) ?? 0,
+                  startDate: DateTime(
+                    _selectedMonthNotifier.value.year,
+                    _selectedMonthNotifier.value.month,
+                    1,
+                  ),
+                  endDate: DateTime(
+                    _selectedMonthNotifier.value.year,
+                    _selectedMonthNotifier.value.month + 1,
+                    0,
+                  ),
+                  isActive: true,
+                );
+                DataService.addOverallBudget(overallBudget);
+                Navigator.pop(context);
+                _loadData();
+              }
+            },
+            child: const Text('Set Overall Budget'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditOverallBudgetDialog() {
+    final amountController = TextEditingController(
+      text: _overallBudgetLimitNotifier.value.toString(),
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Edit Overall Budget for ${DateFormat('MMMM yyyy').format(_selectedMonthNotifier.value)}',
+        ),
+        content: TextField(
+          controller: amountController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Overall Budget Amount',
+            hintText: '0.00',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (amountController.text.isNotEmpty) {
+                final updatedOverallBudget = OverallBudget(
+                  id: _overallBudgetsNotifier.value
+                      .firstWhere(
+                        (b) =>
+                            b.startDate.year ==
+                                _selectedMonthNotifier.value.year &&
+                            b.startDate.month ==
+                                _selectedMonthNotifier.value.month &&
+                            b.isActive,
+                        orElse: () => OverallBudget(
+                          id: '',
+                          limit: 0,
+                          startDate: DateTime.now(),
+                          endDate: DateTime.now(),
+                          isActive: true,
+                        ),
+                      )
+                      .id,
+                  limit: double.tryParse(amountController.text) ?? 0,
+                  startDate: DateTime(
+                    _selectedMonthNotifier.value.year,
+                    _selectedMonthNotifier.value.month,
+                    1,
+                  ),
+                  endDate: DateTime(
+                    _selectedMonthNotifier.value.year,
+                    _selectedMonthNotifier.value.month + 1,
+                    0,
+                  ),
+                  isActive: true,
+                );
+                DataService.updateOverallBudget(updatedOverallBudget);
+                Navigator.pop(context);
+                setState(() {});
+                _loadData();
+              }
+            },
+            child: const Text('Update Overall Budget'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBudgetSummarySection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Budget Summary',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.purple,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _buildBudgetSummaryCard(
+                'Overall Budget',
+                _overallBudgetLimitNotifier.value,
+                Colors.green,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildBudgetSummaryCard(
+                'Total Spent',
+                _totalSpentNotifier.value,
+                Colors.red,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBudgetSummaryCard(String title, double amount, Color color) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -658,12 +1000,198 @@ class _BudgetsScreenState extends State<BudgetsScreen>
     );
   }
 
+  Widget _buildBudgetInsightsSection() {
+    final effectiveTotalBudget = _overallBudgetLimitNotifier.value > 0
+        ? _overallBudgetLimitNotifier.value
+        : _totalBudgetNotifier.value;
+
+    final budgetUtilization = effectiveTotalBudget > 0
+        ? (_totalSpentNotifier.value / effectiveTotalBudget * 100).clamp(0, 100)
+        : 0.0;
+
+    final remainingBudget = effectiveTotalBudget - _totalSpentNotifier.value;
+    final isOverBudget = _totalSpentNotifier.value > effectiveTotalBudget;
+
+    final remainingIncome =
+        _effectiveIncomeNotifier.value - _totalSpentNotifier.value;
+    final isOverIncome =
+        _totalSpentNotifier.value > _effectiveIncomeNotifier.value;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Budget Insights',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildInsightCard(
+                'Budget Utilization',
+                '${budgetUtilization.toStringAsFixed(1)}%',
+                budgetUtilization > 90 ? Colors.red : Colors.green,
+                Icons.pie_chart,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildInsightCard(
+                'Remaining Budget',
+                NumberFormat.currency(symbol: '₹').format(remainingBudget),
+                remainingBudget < 0 ? Colors.red : Colors.green,
+                Icons.account_balance_wallet,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildInsightCard(
+                'Monthly Income',
+                NumberFormat.currency(
+                  symbol: '₹',
+                ).format(_effectiveIncomeNotifier.value),
+                Colors.green,
+                Icons.attach_money,
+                subtitle: _salaryIncomeNotifier.value > 0
+                    ? 'Salary'
+                    : 'All Income',
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildInsightCard(
+                'Income Status',
+                isOverIncome ? 'Over Income' : 'Within Income',
+                isOverIncome ? Colors.red : Colors.green,
+                isOverIncome ? Icons.warning : Icons.check_circle,
+                subtitle: isOverIncome
+                    ? 'Deficit: ${NumberFormat.currency(symbol: '₹').format(remainingIncome.abs())}'
+                    : 'Remaining: ${NumberFormat.currency(symbol: '₹').format(remainingIncome)}',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isOverBudget
+                ? Colors.red.withValues(alpha: 0.1)
+                : Colors.green.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isOverBudget ? Colors.red : Colors.green,
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                isOverBudget ? Icons.warning : Icons.check_circle,
+                color: isOverBudget ? Colors.red : Colors.green,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isOverBudget
+                          ? 'You are over budget by ${NumberFormat.currency(symbol: '₹').format(remainingBudget.abs())}'
+                          : 'You are within budget with ${NumberFormat.currency(symbol: '₹').format(remainingBudget)} remaining',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: isOverBudget ? Colors.red : Colors.green,
+                      ),
+                    ),
+                    if (isOverIncome) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        '⚠️ Your expenses exceed your income by ${NumberFormat.currency(symbol: '₹').format(remainingIncome.abs())}. You might be using your savings.',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInsightCard(
+    String title,
+    String value,
+    Color color,
+    IconData icon, {
+    String? subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 10,
+                color: color.withValues(alpha: 0.7),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildCategoriesWithBudgetsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Income Categories
-        const Text(
+        Text(
           'Income Categories',
           style: TextStyle(
             fontSize: 16,
@@ -679,7 +1207,7 @@ class _BudgetsScreenState extends State<BudgetsScreen>
         const SizedBox(height: 16),
 
         // Expense Categories
-        const Text(
+        Text(
           'Expense Categories',
           style: TextStyle(
             fontSize: 16,
@@ -730,7 +1258,9 @@ class _BudgetsScreenState extends State<BudgetsScreen>
         )
         .fold(0.0, (sum, item) => sum + item.amount);
 
-    final percentage = budget.limit > 0 ? (spent / budget.limit) * 100 : 0.0;
+    // Only show budget information if there's actually a budget set
+    final hasBudget = budget.limit > 0;
+    final percentage = hasBudget ? (spent / budget.limit) * 100 : 0.0;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -740,7 +1270,7 @@ class _BudgetsScreenState extends State<BudgetsScreen>
           child: Icon(icon, color: color),
         ),
         title: Text(categoryName),
-        subtitle: budget.limit > 0
+        subtitle: hasBudget
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -750,7 +1280,9 @@ class _BudgetsScreenState extends State<BudgetsScreen>
                   const SizedBox(height: 4),
                   LinearProgressIndicator(
                     value: percentage / 100,
-                    backgroundColor: Colors.grey[300],
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.surfaceVariant,
                     valueColor: AlwaysStoppedAnimation<Color>(
                       percentage > 90 ? Colors.red : color,
                     ),
@@ -758,7 +1290,7 @@ class _BudgetsScreenState extends State<BudgetsScreen>
                 ],
               )
             : const Text('No budget set'),
-        trailing: budget.limit > 0
+        trailing: hasBudget
             ? Text(
                 '${percentage.toStringAsFixed(1)}%',
                 style: TextStyle(
@@ -768,9 +1300,12 @@ class _BudgetsScreenState extends State<BudgetsScreen>
               )
             : TextButton(
                 onPressed: () => _showSetBudgetDialog(categoryName),
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.primary,
+                ),
                 child: const Text('SET BUDGET'),
               ),
-        onTap: budget.limit > 0 ? () => _showEditBudgetDialog(budget) : null,
+        onTap: hasBudget ? () => _showEditBudgetDialog(budget) : null,
       ),
     );
   }
@@ -778,175 +1313,179 @@ class _BudgetsScreenState extends State<BudgetsScreen>
   void _showAddCategoryDialog() {
     final nameController = TextEditingController();
     String selectedType = 'expense';
-    IconData selectedIcon = Icons.category;
-    Color selectedColor = Colors.blue;
+    String? selectedIcon;
+    String selectedColor = '#2196F3';
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add New Category'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Category Name',
-                hintText: 'e.g., Groceries, Travel',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Add New Category'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Category Name',
+                  hintText: 'e.g., Groceries, Travel',
+                  border: OutlineInputBorder(),
+                ),
               ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: selectedType,
+                decoration: const InputDecoration(
+                  labelText: 'Category Type',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'income', child: Text('Income')),
+                  DropdownMenuItem(value: 'expense', child: Text('Expense')),
+                  DropdownMenuItem(value: 'transfer', child: Text('Transfer')),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    selectedType = value!;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => common_widgets.IconPicker(
+                            selectedIcon: selectedIcon,
+                            onIconSelected: (icon) {
+                              setState(() {
+                                selectedIcon = icon;
+                              });
+                            },
+                            title: 'Select Category Icon',
+                          ),
+                        );
+                      },
+                      icon: Icon(
+                        selectedIcon != null
+                            ? CategoryService.getIconData(selectedIcon!)
+                            : Icons.category,
+                      ),
+                      label: Text(selectedIcon ?? 'Select Icon'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Text('Select Color:'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  _buildColorOption('#FF0000', selectedColor, (color) {
+                    setState(() {
+                      selectedColor = color;
+                    });
+                  }),
+                  _buildColorOption('#FF9800', selectedColor, (color) {
+                    setState(() {
+                      selectedColor = color;
+                    });
+                  }),
+                  _buildColorOption('#FFEB3B', selectedColor, (color) {
+                    setState(() {
+                      selectedColor = color;
+                    });
+                  }),
+                  _buildColorOption('#4CAF50', selectedColor, (color) {
+                    setState(() {
+                      selectedColor = color;
+                    });
+                  }),
+                  _buildColorOption('#2196F3', selectedColor, (color) {
+                    setState(() {
+                      selectedColor = color;
+                    });
+                  }),
+                  _buildColorOption('#9C27B0', selectedColor, (color) {
+                    setState(() {
+                      selectedColor = color;
+                    });
+                  }),
+                  _buildColorOption('#E91E63', selectedColor, (color) {
+                    setState(() {
+                      selectedColor = color;
+                    });
+                  }),
+                  _buildColorOption('#607D8B', selectedColor, (color) {
+                    setState(() {
+                      selectedColor = color;
+                    });
+                  }),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
             ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: selectedType,
-              decoration: const InputDecoration(labelText: 'Category Type'),
-              items: const [
-                DropdownMenuItem(value: 'income', child: Text('Income')),
-                DropdownMenuItem(value: 'expense', child: Text('Expense')),
-              ],
-              onChanged: (value) {
-                selectedType = value!;
+            ElevatedButton(
+              onPressed: () async {
+                if (nameController.text.isNotEmpty && selectedIcon != null) {
+                  final newCategory = Category(
+                    id: const Uuid().v4(),
+                    name: nameController.text,
+                    type: selectedType,
+                    icon: selectedIcon!,
+                    color: selectedColor,
+                    createdAt: DateTime.now(),
+                  );
+
+                  final success = await CategoryService.addCategory(
+                    newCategory,
+                  );
+                  if (success && mounted) {
+                    Navigator.pop(context);
+                    setState(() {});
+                    // Refresh the screen to show new category
+                    _loadData();
+                  }
+                }
               },
-            ),
-            const SizedBox(height: 16),
-            const Text('Select Icon and Color:'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                _buildIconOption(
-                  Icons.restaurant,
-                  Colors.red,
-                  selectedIcon,
-                  selectedColor,
-                  (icon, color) {
-                    selectedIcon = icon;
-                    selectedColor = color;
-                  },
-                ),
-                _buildIconOption(
-                  Icons.directions_car,
-                  Colors.blue,
-                  selectedIcon,
-                  selectedColor,
-                  (icon, color) {
-                    selectedIcon = icon;
-                    selectedColor = color;
-                  },
-                ),
-                _buildIconOption(
-                  Icons.shopping_bag,
-                  Colors.purple,
-                  selectedIcon,
-                  selectedColor,
-                  (icon, color) {
-                    selectedIcon = icon;
-                    selectedColor = color;
-                  },
-                ),
-                _buildIconOption(
-                  Icons.movie,
-                  Colors.pink,
-                  selectedIcon,
-                  selectedColor,
-                  (icon, color) {
-                    selectedIcon = icon;
-                    selectedColor = color;
-                  },
-                ),
-                _buildIconOption(
-                  Icons.medical_services,
-                  Colors.orange,
-                  selectedIcon,
-                  selectedColor,
-                  (icon, color) {
-                    selectedIcon = icon;
-                    selectedColor = color;
-                  },
-                ),
-                _buildIconOption(
-                  Icons.school,
-                  Colors.indigo,
-                  selectedIcon,
-                  selectedColor,
-                  (icon, color) {
-                    selectedIcon = icon;
-                    selectedColor = color;
-                  },
-                ),
-                _buildIconOption(
-                  Icons.home,
-                  Colors.green,
-                  selectedIcon,
-                  selectedColor,
-                  (icon, color) {
-                    selectedIcon = icon;
-                    selectedColor = color;
-                  },
-                ),
-                _buildIconOption(
-                  Icons.devices,
-                  Colors.teal,
-                  selectedIcon,
-                  selectedColor,
-                  (icon, color) {
-                    selectedIcon = icon;
-                    selectedColor = color;
-                  },
-                ),
-              ],
+              child: const Text('Add'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (nameController.text.isNotEmpty) {
-                final newCategory = {
-                  'name': nameController.text,
-                  'icon': selectedIcon,
-                  'color': selectedColor,
-                };
-
-                if (selectedType == 'income') {
-                  _incomeCategories.add(newCategory);
-                } else {
-                  _expenseCategories.add(newCategory);
-                }
-
-                Navigator.pop(context);
-                setState(() {});
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
       ),
     );
   }
 
-  Widget _buildIconOption(
-    IconData icon,
-    Color color,
-    IconData selectedIcon,
-    Color selectedColor,
-    Function(IconData, Color) onTap,
+  Widget _buildColorOption(
+    String colorHex,
+    String selectedColor,
+    Function(String) onTap,
   ) {
-    final isSelected = selectedIcon == icon && selectedColor == color;
+    final color = CategoryService.getColorFromHex(colorHex);
+    final isSelected = selectedColor == colorHex;
 
     return GestureDetector(
-      onTap: () => onTap(icon, color),
+      onTap: () => onTap(colorHex),
       child: Container(
-        padding: const EdgeInsets.all(8),
+        width: 40,
+        height: 40,
         decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.3) : Colors.grey[200],
+          color: color,
           borderRadius: BorderRadius.circular(8),
-          border: isSelected ? Border.all(color: color, width: 2) : null,
+          border: isSelected ? Border.all(color: Colors.black, width: 2) : null,
         ),
-        child: Icon(icon, color: color, size: 24),
+        child: isSelected
+            ? const Icon(Icons.check, color: Colors.white, size: 20)
+            : null,
       ),
     );
   }
@@ -1047,59 +1586,273 @@ class _BudgetsScreenState extends State<BudgetsScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Budget Alerts',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Budget Alerts',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            FutureBuilder<int>(
+              future: WarningPreferencesService.getHiddenWarningsCount(),
+              builder: (context, snapshot) {
+                if (snapshot.hasData && snapshot.data! > 0) {
+                  return TextButton.icon(
+                    onPressed: _showHiddenWarningsDialog,
+                    icon: const Icon(Icons.visibility_off, size: 16),
+                    label: Text('${snapshot.data} Hidden'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.grey[600],
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+          ],
         ),
         const SizedBox(height: 12),
-        ..._budgetAlertsNotifier.value.map(
-          (alert) => Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: alert['severity'] == 'high'
-                  ? Colors.red.withValues(alpha: 0.1)
-                  : Colors.orange.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: alert['severity'] == 'high' ? Colors.red : Colors.orange,
-                width: 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  alert['severity'] == 'high' ? Icons.warning : Icons.info,
-                  color: alert['severity'] == 'high'
-                      ? Colors.red
-                      : Colors.orange,
+        FutureBuilder<List<Map<String, dynamic>>>(
+          future: _getFilteredAlerts(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final alerts = snapshot.data ?? [];
+
+            if (alerts.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green, width: 1),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        alert['title'],
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: alert['severity'] == 'high'
-                              ? Colors.red
-                              : Colors.orange,
-                        ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green),
+                    SizedBox(width: 12),
+                    Text(
+                      'All good! No budget alerts for this month.',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
                       ),
-                      Text(
-                        alert['message'],
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              );
+            }
+
+            return Column(
+              children: alerts.map((alert) => _buildAlertCard(alert)).toList(),
+            );
+          },
         ),
       ],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _getFilteredAlerts() async {
+    final alerts = await BudgetService.getBudgetAlerts();
+    final filteredAlerts = <Map<String, dynamic>>[];
+
+    for (final alert in alerts) {
+      final isHidden = await WarningPreferencesService.isWarningHidden(
+        alert['type'],
+        alert['category'],
+      );
+
+      if (!isHidden) {
+        filteredAlerts.add(alert);
+      }
+    }
+
+    return filteredAlerts;
+  }
+
+  Widget _buildAlertCard(Map<String, dynamic> alert) {
+    final priority = alert['priority'] ?? 'medium';
+    final severity = alert['severity'] ?? 'medium';
+
+    Color priorityColor;
+    IconData priorityIcon;
+
+    switch (priority) {
+      case 'high':
+        priorityColor = Colors.red;
+        priorityIcon = Icons.priority_high;
+        break;
+      case 'medium':
+        priorityColor = Colors.orange;
+        priorityIcon = Icons.info;
+        break;
+      case 'low':
+        priorityColor = Colors.blue;
+        priorityIcon = Icons.lightbulb;
+        break;
+      default:
+        priorityColor = Colors.grey;
+        priorityIcon = Icons.info;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: priorityColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: priorityColor, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(priorityIcon, color: priorityColor, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  alert['title'],
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: priorityColor,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              if (alert['canHide'] == true)
+                IconButton(
+                  onPressed: () => _hideWarning(alert),
+                  icon: const Icon(Icons.close, size: 16),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
+                  color: priorityColor,
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(alert['message'], style: const TextStyle(fontSize: 12)),
+          if (alert['priority'] != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: priorityColor.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    priority.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: priorityColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                if (alert['resetMonthly'] == true) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'RESETS MONTHLY',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.blue,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _hideWarning(Map<String, dynamic> alert) async {
+    await WarningPreferencesService.hideWarning(
+      alert['type'],
+      alert['category'],
+    );
+
+    // Refresh the alerts
+    setState(() {});
+  }
+
+  void _showHiddenWarningsDialog() async {
+    final hiddenWarnings = await WarningPreferencesService.getHiddenWarnings();
+    final stats = await WarningPreferencesService.getWarningStatistics();
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hidden Warnings'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Total Hidden: ${stats['totalHidden']}'),
+            Text('Monthly (Auto-reset): ${stats['monthlyHidden']}'),
+            Text('Permanent: ${stats['permanentHidden']}'),
+            const SizedBox(height: 16),
+            if (hiddenWarnings.isNotEmpty) ...[
+              const Text(
+                'Hidden Warnings:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              ...hiddenWarnings.values.map(
+                (warning) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    '• ${warning['type']}${warning['category'] != null ? ' (${warning['category']})' : ''}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await WarningPreferencesService.clearAllHiddenWarnings();
+              Navigator.pop(context);
+              setState(() {});
+            },
+            child: const Text('Clear All'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1121,16 +1874,64 @@ class _BudgetsScreenState extends State<BudgetsScreen>
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.blue, width: 1),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.lightbulb, color: Colors.blue),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: Text(
-                    recommendation['message'],
-                    style: const TextStyle(fontSize: 12),
-                  ),
+                Row(
+                  children: [
+                    const Icon(Icons.lightbulb, color: Colors.blue),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        recommendation['message'],
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
                 ),
+                if (recommendation['suggestedAmount'] != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Suggested Amount:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        NumberFormat.currency(
+                          symbol: '₹',
+                        ).format(recommendation['suggestedAmount']),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (recommendation['type'] == 'set_overall_budget') ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showSetOverallBudgetDialog();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      child: const Text('Set Overall Budget'),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

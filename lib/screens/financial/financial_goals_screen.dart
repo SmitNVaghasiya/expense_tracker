@@ -340,7 +340,7 @@ class _AddEditGoalSheetState extends State<_AddEditGoalSheet> {
       _titleController.text = goal.title;
       _targetAmountController.text = goal.targetAmount.toString();
       _currentAmountController.text = goal.currentAmount.toString();
-      _descriptionController.text = goal.description ?? '';
+      _descriptionController.text = goal.description;
       _targetDate = goal.targetDate;
       _goalType = goal.goalType;
       _isCompleted = goal.isCompleted;

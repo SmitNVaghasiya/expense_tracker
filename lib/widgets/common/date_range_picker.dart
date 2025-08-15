@@ -114,8 +114,8 @@ class DateRangePicker extends StatelessWidget {
           final DateTime? picked = await showDatePicker(
             context: context,
             initialDate: value ?? DateTime.now(),
-            firstDate: firstDate ?? DateTime(2020),
-            lastDate: lastDate ?? DateTime.now().add(const Duration(days: 365)),
+            firstDate: firstDate ?? DateTime(1800),
+            lastDate: lastDate ?? DateTime.now().add(const Duration(days: 36500)),
             builder: (context, child) {
               return Theme(
                 data: Theme.of(context).copyWith(

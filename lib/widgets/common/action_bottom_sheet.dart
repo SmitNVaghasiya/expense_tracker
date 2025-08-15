@@ -28,9 +28,7 @@ class ActionBottomSheet extends StatelessWidget {
       ),
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(20),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -45,20 +43,17 @@ class ActionBottomSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          
+
           // Title
           Padding(
             padding: padding ?? const EdgeInsets.all(20),
             child: Text(
               title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
           ),
-          
+
           // Actions List
           Flexible(
             child: ListView.builder(
@@ -70,23 +65,20 @@ class ActionBottomSheet extends StatelessWidget {
               },
             ),
           ),
-          
+
           // Cancel Button
           if (showCancelButton) ...[
             const Divider(height: 1),
             ListTile(
               title: Text(
                 cancelText ?? 'Cancel',
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: Colors.red,
-                ),
+                style: const TextStyle(fontSize: 16, color: Colors.red),
                 textAlign: TextAlign.center,
               ),
               onTap: onCancel ?? () => Navigator.of(context).pop(),
             ),
           ],
-          
+
           // Bottom Safe Area
           SizedBox(height: MediaQuery.of(context).padding.bottom),
         ],
@@ -113,7 +105,9 @@ class ActionBottomSheet extends StatelessWidget {
               action.subtitle!,
               style: TextStyle(
                 fontSize: 14,
-                color: action.subtitleColor ?? Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                color:
+                    action.subtitleColor ??
+                    Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
               ),
             )
           : null,
@@ -177,9 +171,7 @@ class ConfirmationBottomSheet extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(20),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -194,7 +186,7 @@ class ConfirmationBottomSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          
+
           // Icon
           if (icon != null) ...[
             const SizedBox(height: 20),
@@ -205,20 +197,17 @@ class ConfirmationBottomSheet extends StatelessWidget {
             ),
             const SizedBox(height: 16),
           ],
-          
+
           // Title
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Text(
               title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
           ),
-          
+
           // Message
           Padding(
             padding: const EdgeInsets.all(20),
@@ -232,7 +221,7 @@ class ConfirmationBottomSheet extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
           ),
-          
+
           // Action Buttons
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -247,9 +236,7 @@ class ConfirmationBottomSheet extends StatelessWidget {
                     },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: cancelColor ?? Colors.grey[600],
-                      side: BorderSide(
-                        color: cancelColor ?? Colors.grey[400]!,
-                      ),
+                      side: BorderSide(color: cancelColor ?? Colors.grey[400]!),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -258,9 +245,9 @@ class ConfirmationBottomSheet extends StatelessWidget {
                     child: Text(cancelText),
                   ),
                 ),
-                
+
                 const SizedBox(width: 12),
-                
+
                 // Confirm Button
                 Expanded(
                   child: ElevatedButton(
@@ -269,7 +256,8 @@ class ConfirmationBottomSheet extends StatelessWidget {
                       Navigator.of(context).pop();
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: confirmColor ?? Theme.of(context).colorScheme.primary,
+                      backgroundColor:
+                          confirmColor ?? Theme.of(context).colorScheme.primary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
@@ -282,7 +270,7 @@ class ConfirmationBottomSheet extends StatelessWidget {
               ],
             ),
           ),
-          
+
           // Bottom Safe Area
           SizedBox(height: MediaQuery.of(context).padding.bottom + 20),
         ],

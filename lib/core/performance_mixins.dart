@@ -54,7 +54,6 @@ mixin EfficientFilteringMixin<T> on StatefulWidget {
 
 /// Mixin for automatic keep alive functionality in tabs
 mixin AutomaticKeepAliveMixin<T extends StatefulWidget> on State<T> {
-  @override
   bool get wantKeepAlive => true;
 }
 

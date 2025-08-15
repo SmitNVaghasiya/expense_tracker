@@ -7,7 +7,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:spendwise/models/transaction.dart';
 import 'package:spendwise/models/account.dart';
 import 'package:spendwise/models/budget.dart';
+import 'package:spendwise/models/overall_budget.dart';
 import 'package:spendwise/models/group.dart';
+import 'package:spendwise/models/category.dart';
 import 'package:spendwise/services/error_service.dart';
 import 'dart:convert';
 import 'package:spendwise/models/loan.dart';
@@ -15,16 +17,19 @@ import 'package:spendwise/models/loan.dart';
 class DatabaseService {
   static Database? _database;
   static const String _dbName = 'spendwise.db';
-  static const int _dbVersion = 4; // Increment version to trigger upgrades
+  static const int _dbVersion = 6; // Increment version to trigger upgrades
 
   // Table names
   static const String _transactionsTable = 'transactions';
   static const String _accountsTable = 'accounts';
   static const String _budgetsTable = 'budgets';
+  static const String _overallBudgetsTable = 'overall_budgets';
+  static const String _categoriesTable = 'categories';
   static const String _groupsTable = 'groups';
-  static const String _recurringTransactionsTable = 'recurring_transactions';
-  static const String _billRemindersTable = 'bill_reminders';
+  static const String _loansTable = 'loans';
   static const String _financialGoalsTable = 'financial_goals';
+  static const String _billRemindersTable = 'bill_reminders';
+  static const String _recurringTransactionsTable = 'recurring_transactions';
 
   // Initialize database
   static Future<Database> get database async {
@@ -105,12 +110,31 @@ class DatabaseService {
         balance REAL NOT NULL,
         type TEXT NOT NULL,
         icon TEXT,
+        "limit" REAL,
         createdAt TEXT NOT NULL
       )
     ''');
 
     // Create index for accounts
     await db.execute('CREATE INDEX idx_accounts_type ON $_accountsTable(type)');
+
+    // Create categories table
+    await db.execute('''
+      CREATE TABLE $_categoriesTable (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        icon TEXT NOT NULL,
+        color TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        isDefault INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+
+    // Create index for categories
+    await db.execute(
+      'CREATE INDEX idx_categories_type ON $_categoriesTable(type)',
+    );
 
     // Create budgets table
     await db.execute('''
@@ -121,6 +145,18 @@ class DatabaseService {
         category TEXT NOT NULL,
         startDate TEXT NOT NULL,
         endDate TEXT NOT NULL
+      )
+    ''');
+
+    // Create overall budgets table
+    await db.execute('''
+      CREATE TABLE $_overallBudgetsTable (
+        id TEXT PRIMARY KEY,
+        "limit" REAL NOT NULL,
+        startDate TEXT NOT NULL,
+        endDate TEXT NOT NULL,
+        name TEXT NOT NULL,
+        isActive INTEGER NOT NULL
       )
     ''');
 
@@ -136,7 +172,7 @@ class DatabaseService {
 
     // Create loans table
     await db.execute('''
-    CREATE TABLE loans (
+    CREATE TABLE $_loansTable (
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL,
       person TEXT NOT NULL,
@@ -309,9 +345,9 @@ class DatabaseService {
       await db.execute('DROP TABLE budgets_old');
 
       // Fix loans table - add missing columns and reorder
-      await db.execute('ALTER TABLE loans RENAME TO loans_old');
+      await db.execute('ALTER TABLE $_loansTable RENAME TO loans_old');
       await db.execute('''
-        CREATE TABLE loans (
+        CREATE TABLE $_loansTable (
           id TEXT PRIMARY KEY,
           type TEXT NOT NULL,
           person TEXT NOT NULL,
@@ -333,7 +369,7 @@ class DatabaseService {
         )
       ''');
       await db.execute('''
-        INSERT INTO loans (id, type, person, amount, date, dueDate, status, notes, accountId, 
+        INSERT INTO $_loansTable (id, type, person, amount, date, dueDate, status, notes, accountId, 
                           paymentFrequency, paymentDay, monthlyPayment, paidAmount, autoDeduct, 
                           nextPaymentDate, nextPaymentAmount, paymentHistory, createdAt)
         SELECT id, type, person, amount, date, dueDate, status, notes, accountId,
@@ -359,6 +395,43 @@ class DatabaseService {
       await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_accounts_type ON $_accountsTable(type)',
       );
+    }
+
+    if (oldVersion < 5) {
+      // Add limit column to accounts table
+      await db.execute('ALTER TABLE $_accountsTable ADD COLUMN "limit" REAL');
+
+      // Create categories table if it doesn't exist
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $_categoriesTable (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL,
+          icon TEXT NOT NULL,
+          color TEXT NOT NULL,
+          createdAt TEXT NOT NULL,
+          isDefault INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+
+      // Create index for categories
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_categories_type ON $_categoriesTable(type)',
+      );
+    }
+
+    if (oldVersion < 6) {
+      // Create overall budgets table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $_overallBudgetsTable (
+          id TEXT PRIMARY KEY,
+          "limit" REAL NOT NULL,
+          startDate TEXT NOT NULL,
+          endDate TEXT NOT NULL,
+          name TEXT NOT NULL,
+          isActive INTEGER NOT NULL
+        )
+      ''');
     }
   }
 
@@ -437,6 +510,7 @@ class DatabaseService {
         balance: maps[i]['balance'],
         type: maps[i]['type'],
         icon: maps[i]['icon'],
+        limit: maps[i]['limit'],
         createdAt: DateTime.parse(maps[i]['createdAt']),
       );
     });
@@ -464,6 +538,51 @@ class DatabaseService {
   static Future<void> deleteAccount(String id) async {
     final db = await database;
     await db.delete(_accountsTable, where: 'id = ?', whereArgs: [id]);
+  }
+
+  // Category methods
+  static Future<List<Category>> getCategories() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(_categoriesTable);
+    return List.generate(maps.length, (i) {
+      return Category.fromJson(maps[i]);
+    });
+  }
+
+  static Future<List<Category>> getCategoriesByType(String type) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      _categoriesTable,
+      where: 'type = ?',
+      whereArgs: [type],
+    );
+    return List.generate(maps.length, (i) {
+      return Category.fromJson(maps[i]);
+    });
+  }
+
+  static Future<void> addCategory(Category category) async {
+    final db = await database;
+    await db.insert(
+      _categoriesTable,
+      category.toJson(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<void> updateCategory(Category category) async {
+    final db = await database;
+    await db.update(
+      _categoriesTable,
+      category.toJson(),
+      where: 'id = ?',
+      whereArgs: [category.id],
+    );
+  }
+
+  static Future<void> deleteCategory(String id) async {
+    final db = await database;
+    await db.delete(_categoriesTable, where: 'id = ?', whereArgs: [id]);
   }
 
   // Budget methods
@@ -497,6 +616,41 @@ class DatabaseService {
   static Future<void> deleteBudget(String id) async {
     final db = await database;
     await db.delete(_budgetsTable, where: 'id = ?', whereArgs: [id]);
+  }
+
+  // Overall Budget methods
+  static Future<List<OverallBudget>> getOverallBudgets() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      _overallBudgetsTable,
+    );
+    return List.generate(maps.length, (i) {
+      return OverallBudget.fromJson(maps[i]);
+    });
+  }
+
+  static Future<void> addOverallBudget(OverallBudget budget) async {
+    final db = await database;
+    await db.insert(
+      _overallBudgetsTable,
+      budget.toJson(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<void> updateOverallBudget(OverallBudget budget) async {
+    final db = await database;
+    await db.update(
+      _overallBudgetsTable,
+      budget.toJson(),
+      where: 'id = ?',
+      whereArgs: [budget.id],
+    );
+  }
+
+  static Future<void> deleteOverallBudget(String id) async {
+    final db = await database;
+    await db.delete(_overallBudgetsTable, where: 'id = ?', whereArgs: [id]);
   }
 
   // Group methods
@@ -560,7 +714,7 @@ class DatabaseService {
   // Loan methods
   static Future<List<Loan>> getLoans() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('loans');
+    final List<Map<String, dynamic>> maps = await db.query(_loansTable);
     return List.generate(maps.length, (i) {
       final map = maps[i];
       // Convert payment history from JSON string to List
@@ -608,7 +762,7 @@ class DatabaseService {
       loan.paymentHistory.map((p) => p.toJson()).toList(),
     );
     await db.insert(
-      'loans',
+      _loansTable,
       loanData,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -621,12 +775,17 @@ class DatabaseService {
     loanData['paymentHistory'] = jsonEncode(
       loan.paymentHistory.map((p) => p.toJson()).toList(),
     );
-    await db.update('loans', loanData, where: 'id = ?', whereArgs: [loan.id]);
+    await db.update(
+      _loansTable,
+      loanData,
+      where: 'id = ?',
+      whereArgs: [loan.id],
+    );
   }
 
   static Future<void> deleteLoan(String id) async {
     final db = await database;
-    await db.delete('loans', where: 'id = ?', whereArgs: [id]);
+    await db.delete(_loansTable, where: 'id = ?', whereArgs: [id]);
   }
 
   // Clear all data (for testing)

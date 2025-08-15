@@ -1,7 +1,9 @@
 import 'package:spendwise/models/transaction.dart';
 import 'package:spendwise/models/budget.dart';
+import 'package:spendwise/models/overall_budget.dart';
 import 'package:spendwise/models/group.dart';
 import 'package:spendwise/models/account.dart';
+import 'package:spendwise/models/category.dart';
 import 'package:spendwise/services/database_service.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 import 'dart:convert';
@@ -16,7 +18,7 @@ class DataService {
   static Future<void> addTransaction(Transaction transaction) async {
     // Use a single database connection for all operations
     final db = await DatabaseService.database;
-    
+
     try {
       // Start a transaction for atomicity
       await db.transaction((txn) async {
@@ -29,7 +31,12 @@ class DataService {
 
         // Update account balance if account is specified - use direct query instead of fetching all accounts
         if (transaction.accountId != null) {
-          await _updateAccountBalanceDirect(txn, transaction.accountId!, transaction.amount, transaction.type);
+          await _updateAccountBalanceDirect(
+            txn,
+            transaction.accountId!,
+            transaction.amount,
+            transaction.type,
+          );
         }
       });
     } catch (e) {
@@ -41,12 +48,15 @@ class DataService {
   static Future<void> updateTransaction(Transaction transaction) async {
     // Use a single database connection for all operations
     final db = await DatabaseService.database;
-    
+
     try {
       // Start a transaction for atomicity
       await db.transaction((txn) async {
         // Get the old transaction to calculate balance difference
-        final oldTransaction = await _getTransactionByIdDirect(txn, transaction.id);
+        final oldTransaction = await _getTransactionByIdDirect(
+          txn,
+          transaction.id,
+        );
 
         // Update transaction in database
         await txn.update(
@@ -86,14 +96,15 @@ class DataService {
   static Future<void> deleteTransaction(String id) async {
     // Use a single database connection for all operations
     final db = await DatabaseService.database;
-    
+
     try {
       // Start a transaction for atomicity
       await db.transaction((txn) async {
         // Get the transaction being deleted to reverse its effect on account balance
         final transactionToDelete = await _getTransactionByIdDirect(txn, id);
 
-        if (transactionToDelete != null && transactionToDelete.accountId != null) {
+        if (transactionToDelete != null &&
+            transactionToDelete.accountId != null) {
           // Update account balance to reverse the transaction
           await _updateAccountBalanceDirect(
             txn,
@@ -136,6 +147,23 @@ class DataService {
 
   static Future<void> deleteBudget(String id) async {
     await DatabaseService.deleteBudget(id);
+  }
+
+  // Overall Budget methods
+  static Future<List<OverallBudget>> getOverallBudgets() async {
+    return await DatabaseService.getOverallBudgets();
+  }
+
+  static Future<void> addOverallBudget(OverallBudget budget) async {
+    await DatabaseService.addOverallBudget(budget);
+  }
+
+  static Future<void> updateOverallBudget(OverallBudget budget) async {
+    await DatabaseService.updateOverallBudget(budget);
+  }
+
+  static Future<void> deleteOverallBudget(String id) async {
+    await DatabaseService.deleteOverallBudget(id);
   }
 
   // Group methods
@@ -385,8 +413,14 @@ class DataService {
       END
       WHERE id = ?
     ''';
-    
-    await txn.rawUpdate(sql, [transactionType, amount, transactionType, amount, accountId]);
+
+    await txn.rawUpdate(sql, [
+      transactionType,
+      amount,
+      transactionType,
+      amount,
+      accountId,
+    ]);
   }
 
   // Helper method to get transaction by ID directly from transaction context
@@ -399,9 +433,9 @@ class DataService {
       where: 'id = ?',
       whereArgs: [id],
     );
-    
+
     if (maps.isEmpty) return null;
-    
+
     return Transaction(
       id: maps[0]['id'],
       title: maps[0]['title'],
@@ -414,5 +448,26 @@ class DataService {
       transferId: maps[0]['transferId'],
       toAccountId: maps[0]['toAccountId'],
     );
+  }
+
+  // Category methods
+  static Future<List<Category>> getCategories() async {
+    return await DatabaseService.getCategories();
+  }
+
+  static Future<List<Category>> getCategoriesByType(String type) async {
+    return await DatabaseService.getCategoriesByType(type);
+  }
+
+  static Future<void> addCategory(Category category) async {
+    await DatabaseService.addCategory(category);
+  }
+
+  static Future<void> updateCategory(Category category) async {
+    await DatabaseService.updateCategory(category);
+  }
+
+  static Future<void> deleteCategory(String id) async {
+    await DatabaseService.deleteCategory(id);
   }
 }

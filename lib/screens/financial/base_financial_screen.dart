@@ -134,7 +134,6 @@ class _BaseListFinancialScreenState extends State<BaseListFinancialScreen>
   late final ValueNotifier<List<dynamic>> _itemsNotifier;
   late final ValueNotifier<List<dynamic>> _filteredItemsNotifier;
   late final ValueNotifier<String> _searchQueryNotifier;
-  late final ValueNotifier<bool> _isLoadingNotifier;
 
   @override
   void initState() {
@@ -147,32 +146,10 @@ class _BaseListFinancialScreenState extends State<BaseListFinancialScreen>
     _itemsNotifier = getNotifier('items', []);
     _filteredItemsNotifier = getNotifier('filteredItems', []);
     _searchQueryNotifier = getNotifier('searchQuery', '');
-    _isLoadingNotifier = getNotifier('isLoading', false);
   }
 
-  @override
-  Widget _buildContent() {
-    return ValueListenableBuilder<List<dynamic>>(
-      valueListenable: _filteredItemsNotifier,
-      builder: (context, items, child) {
-        if (items.isEmpty) {
-          return _buildEmptyState();
-        }
 
-        return Column(
-          children: [
-            // Summary section
-            _buildSummarySection(),
 
-            // List section
-            Expanded(child: _buildListSection(items)),
-          ],
-        );
-      },
-    );
-  }
-
-  @override
   Future<void> _loadData() async {
     // Override in subclasses
   }
@@ -291,12 +268,7 @@ class _BaseListFinancialScreenState extends State<BaseListFinancialScreen>
     return item.toString().toLowerCase().contains(query.toLowerCase());
   }
 
-  @override
-  List<Widget> _buildAppBarActions() {
-    return [
-      IconButton(icon: const Icon(Icons.search), onPressed: _showSearchDialog),
-    ];
-  }
+
 
   void _showSearchDialog() {
     showDialog(

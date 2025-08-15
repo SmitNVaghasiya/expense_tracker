@@ -3,7 +3,6 @@ import 'package:spendwise/models/recurring_transaction.dart';
 import 'package:spendwise/services/recurring_transaction_service.dart';
 import 'package:spendwise/widgets/common/index.dart' as common_widgets;
 import 'package:spendwise/widgets/common/display_options_dialog.dart';
-import 'package:intl/intl.dart';
 
 class RecurringTransactionsScreen extends StatefulWidget {
   const RecurringTransactionsScreen({super.key});
@@ -550,8 +549,8 @@ class _AddEditRecurringTransactionSheetState
                       final date = await showDatePicker(
                         context: context,
                         initialDate: _startDate,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2030),
+                        firstDate: DateTime(1800),
+                        lastDate: DateTime.now().add(const Duration(days: 36500)),
                       );
                       if (date != null) {
                         setState(() => _startDate = date);

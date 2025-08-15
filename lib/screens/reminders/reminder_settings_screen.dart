@@ -84,12 +84,15 @@ class _ReminderSettingsScreenState extends State<ReminderSettingsScreen> {
                 // Time Selection
                 if (reminderService.isEnabled) ...[
                   Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.schedule),
-                      title: const Text('Reminder Time'),
-                      subtitle: Text(reminderService.getReminderTimeString()),
-                      trailing: const Icon(Icons.arrow_forward_ios),
-                      onTap: () => _selectTime(context, reminderService),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: common_widgets.SimpleTimeInput(
+                        initialTime: reminderService.reminderTime,
+                        onTimeChanged: (time) {
+                          reminderService.setReminderTime(time);
+                        },
+                        label: 'Reminder Time',
+                      ),
                     ),
                   ),
 
@@ -179,27 +182,5 @@ class _ReminderSettingsScreenState extends State<ReminderSettingsScreen> {
     );
   }
 
-  Future<void> _selectTime(
-    BuildContext context,
-    ReminderService reminderService,
-  ) async {
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: reminderService.reminderTime,
-      builder: (BuildContext context, Widget? child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
 
-    if (picked != null && picked != reminderService.reminderTime) {
-      reminderService.setReminderTime(picked);
-    }
-  }
 }

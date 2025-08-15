@@ -69,12 +69,12 @@ class OptimizedCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget card = Card(
-      color: color,
-      shadowColor: shadowColor,
-      elevation: elevation,
-      shape: shape,
-      margin: margin,
-      clipBehavior: clipBehavior,
+      color: color ?? Theme.of(context).cardColor,
+      shadowColor: shadowColor ?? Theme.of(context).cardTheme.shadowColor,
+      elevation: elevation ?? Theme.of(context).cardTheme.elevation,
+      shape: shape ?? Theme.of(context).cardTheme.shape,
+      margin: margin ?? Theme.of(context).cardTheme.margin,
+      clipBehavior: clipBehavior ?? Theme.of(context).cardTheme.clipBehavior,
       child: child,
     );
 
@@ -376,11 +376,7 @@ class OptimizedPadding extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget paddingWidget = Padding(
-      key: key,
-      padding: padding,
-      child: child,
-    );
+    Widget paddingWidget = Padding(key: key, padding: padding, child: child);
 
     if (useRepaintBoundary) {
       paddingWidget = RepaintBoundary(child: paddingWidget);

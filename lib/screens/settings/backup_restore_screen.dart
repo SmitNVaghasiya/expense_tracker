@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:spendwise/services/data_service.dart';
 import 'package:spendwise/models/transaction.dart';
 import 'package:spendwise/models/account.dart';
-import 'package:spendwise/widgets/common/index.dart' as common_widgets;
+
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';

@@ -150,7 +150,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         });
       }
     } catch (e) {
-      print('Error loading dashboard data: $e');
+      // Log error for debugging
+      debugPrint('Error loading dashboard data: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -459,7 +460,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                     children: [
                       Text(
                         'Lent',
-                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.7),
+                        ),
                       ),
                       Text(
                         '${currencyProvider.currencySymbol}${totalLent.toStringAsFixed(2)}',
@@ -486,7 +492,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                     children: [
                       Text(
                         'Borrowed',
-                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.7),
+                        ),
                       ),
                       Text(
                         '${currencyProvider.currencySymbol}${totalBorrowed.toStringAsFixed(2)}',
@@ -617,20 +628,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       case TimePeriod.yearly:
         return DateFormat('yyyy').format(_selectedDate);
     }
-  }
-
-  void _navigateToAddTransaction(String type) async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => CalculatorTransactionScreen(
-          initialType: type,
-          initialDate: _selectedDate,
-        ),
-      ),
-    );
-    // The AppState listener will automatically refresh the dashboard
-    // when the user returns, so no need to manually call _loadData()
   }
 
   void _navigateToPreviousPeriod() {
@@ -772,8 +769,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      firstDate: DateTime(1800),
+      lastDate: DateTime.now().add(const Duration(days: 36500)),
     );
     if (picked != null && picked != _selectedDate) {
       setState(() {
@@ -952,12 +949,14 @@ class _DashboardScreenState extends State<DashboardScreen>
             Expanded(
               child: Column(
                 children: [
-                  const Text(
+                  Text(
                     'EXPENSE',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: Colors.grey,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.7),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -975,12 +974,14 @@ class _DashboardScreenState extends State<DashboardScreen>
             Expanded(
               child: Column(
                 children: [
-                  const Text(
+                  Text(
                     'INCOME',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: Colors.grey,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.7),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -998,12 +999,14 @@ class _DashboardScreenState extends State<DashboardScreen>
             Expanded(
               child: Column(
                 children: [
-                  const Text(
+                  Text(
                     'BALANCE',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: Colors.grey,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.7),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -1173,11 +1176,11 @@ class _DashboardScreenState extends State<DashboardScreen>
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withValues(alpha: 0.1),
+              color: Theme.of(context).shadowColor.withValues(alpha: 0.1),
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),
@@ -1224,12 +1227,19 @@ class _DashboardScreenState extends State<DashboardScreen>
                             ? Icons.account_balance_wallet
                             : Icons.credit_card,
                         size: 14,
-                        color: Colors.grey[600],
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.6),
                       ),
                       const SizedBox(width: 4),
                       Text(
                         _getAccountName(transaction.accountId),
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.6),
+                        ),
                       ),
                     ],
                   ),
@@ -1349,10 +1359,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-
-
-
-
   String _getPeriodDisplayName(TimePeriod period) {
     switch (period) {
       case TimePeriod.daily:
@@ -1383,7 +1389,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       case 'mobile recharge':
         return Colors.orange;
       default:
-        return Colors.grey;
+        return Theme.of(context).colorScheme.primary;
     }
   }
 

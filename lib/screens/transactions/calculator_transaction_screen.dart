@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:spendwise/models/transaction.dart';
 import 'package:spendwise/models/account.dart';
 import 'package:spendwise/services/data_service.dart';
-import 'package:spendwise/services/app_state.dart';
 import 'package:spendwise/widgets/common/index.dart' as common_widgets;
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
-import 'package:provider/provider.dart';
 
 class CalculatorTransactionScreen extends StatefulWidget {
   final String initialType;
@@ -30,6 +28,8 @@ class _CalculatorTransactionScreenState
   String _selectedType = 'expense';
   String _displayAmount = '0';
   String _calculationString = '';
+  final List<String> _calculationHistory = [];
+  String _runningTotal = '0';
   String _selectedCategory = '';
   String? _selectedAccountId;
   String? _selectedToAccountId; // For transfer functionality
@@ -416,6 +416,12 @@ class _CalculatorTransactionScreenState
         _displayAmount += number;
       }
       _calculationString += number;
+
+      // Update running total if we have a complete expression
+      if (_calculationString.isNotEmpty &&
+          !_isOperator(_calculationString[_calculationString.length - 1])) {
+        _updateRunningTotal();
+      }
     });
   }
 
@@ -429,17 +435,38 @@ class _CalculatorTransactionScreenState
     }
   }
 
+  void _updateRunningTotal() {
+    try {
+      if (_calculationString.isNotEmpty) {
+        final result = _evaluateExpression(_calculationString);
+        _runningTotal = result.toStringAsFixed(2);
+      }
+    } catch (e) {
+      _runningTotal = 'Error';
+    }
+  }
+
   void _onEqualsPressed() {
     try {
       final result = _evaluateExpression(_calculationString);
       setState(() {
         _displayAmount = result.toStringAsFixed(2);
         _calculationString = _displayAmount;
+        _runningTotal = _displayAmount;
+
+        // Add to calculation history
+        if (_calculationString.isNotEmpty) {
+          _calculationHistory.add(_calculationString);
+          if (_calculationHistory.length > 10) {
+            _calculationHistory.removeAt(0);
+          }
+        }
       });
     } catch (e) {
       setState(() {
         _displayAmount = 'Error';
         _calculationString = '';
+        _runningTotal = 'Error';
       });
     }
   }
@@ -453,10 +480,12 @@ class _CalculatorTransactionScreenState
         );
         if (_calculationString.isEmpty) {
           _displayAmount = '0';
+          _runningTotal = '0';
         } else {
           // Update display to show current number being entered
           final parts = _calculationString.split(RegExp(r'[+\-×÷]'));
           _displayAmount = parts.last.isEmpty ? '0' : parts.last;
+          _updateRunningTotal();
         }
       }
     });
@@ -469,6 +498,15 @@ class _CalculatorTransactionScreenState
         _calculationString += '.';
       });
     }
+  }
+
+  void _onClearPressed() {
+    setState(() {
+      _displayAmount = '0';
+      _calculationString = '';
+      _runningTotal = '0';
+      _calculationHistory.clear();
+    });
   }
 
   bool _isOperator(String char) {
@@ -572,24 +610,12 @@ class _CalculatorTransactionScreenState
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      firstDate: DateTime(1800),
+      lastDate: DateTime.now().add(const Duration(days: 36500)),
     );
     if (picked != null && picked != _selectedDate) {
       setState(() {
         _selectedDate = picked;
-      });
-    }
-  }
-
-  Future<void> _selectTime() async {
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: _selectedTime,
-    );
-    if (picked != null && picked != _selectedTime) {
-      setState(() {
-        _selectedTime = picked;
       });
     }
   }
@@ -716,9 +742,11 @@ class _CalculatorTransactionScreenState
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: Colors.orange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                    border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1028,7 +1056,7 @@ class _CalculatorTransactionScreenState
 
           const SizedBox(height: 8),
 
-          // Amount display
+          // Calculator Display with History
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 8),
             padding: const EdgeInsets.all(12),
@@ -1037,22 +1065,130 @@ class _CalculatorTransactionScreenState
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Theme.of(context).dividerColor),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '₹$_displayAmount',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+                // Calculation History
+                if (_calculationHistory.isNotEmpty) ...[
+                  SizedBox(
+                    height: 60,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _calculationHistory.length,
+                      itemBuilder: (context, index) {
+                        final historyItem =
+                            _calculationHistory[_calculationHistory.length -
+                                1 -
+                                index];
+                        return Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: Theme.of(context).dividerColor,
+                            ),
+                          ),
+                          child: Text(
+                            historyItem,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
+                  const SizedBox(height: 8),
+                ],
+
+                // Current Expression and Result
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_calculationString.isNotEmpty) ...[
+                            Text(
+                              _calculationString,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.6),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                          ],
+                          Text(
+                            '₹$_displayAmount',
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        IconButton(
+                          onPressed: _onClearPressed,
+                          icon: const Icon(Icons.clear),
+                          iconSize: 20,
+                          padding: EdgeInsets.zero,
+                          tooltip: 'Clear',
+                        ),
+                        IconButton(
+                          onPressed: _onBackspacePressed,
+                          icon: const Icon(Icons.backspace_outlined),
+                          iconSize: 20,
+                          padding: EdgeInsets.zero,
+                          tooltip: 'Backspace',
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                IconButton(
-                  onPressed: _onBackspacePressed,
-                  icon: const Icon(Icons.backspace_outlined),
-                  iconSize: 20,
-                  padding: EdgeInsets.zero,
-                ),
+
+                // Running Total
+                if (_calculationString.isNotEmpty &&
+                    _runningTotal != '0' &&
+                    _runningTotal != 'Error') ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '= ₹$_runningTotal',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1097,26 +1233,14 @@ class _CalculatorTransactionScreenState
                 ),
                 const Text('|', style: TextStyle(fontSize: 14)),
                 Expanded(
-                  child: GestureDetector(
-                    onTap: _selectTime,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: Theme.of(context).dividerColor,
-                        ),
-                      ),
-                      child: Text(
-                        _selectedTime.format(context),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
+                  child: common_widgets.SimpleTimeInput(
+                    initialTime: _selectedTime,
+                    onTimeChanged: (time) {
+                      setState(() {
+                        _selectedTime = time;
+                      });
+                    },
+                    label: null,
                   ),
                 ),
               ],
@@ -1135,58 +1259,65 @@ class _CalculatorTransactionScreenState
   ) {
     final categoryColor = _getCategoryColor(value);
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: label == 'Category'
-              ? categoryColor.withOpacity(0.1)
-              : Colors.grey[100],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
             color: label == 'Category'
-                ? categoryColor.withOpacity(0.3)
-                : Colors.grey[300]!,
+                ? categoryColor.withValues(alpha: 0.1)
+                : Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: label == 'Category'
+                  ? categoryColor.withValues(alpha: 0.3)
+                  : Theme.of(context).dividerColor,
+            ),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 20,
-                  color: label == 'Category' ? categoryColor : Colors.grey[600],
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: label == 'Category'
-                          ? categoryColor
-                          : Colors.black87,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    icon,
+                    size: 20,
+                    color: label == 'Category'
+                        ? categoryColor
+                        : Colors.grey[600],
                   ),
-                ),
-                Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
-              ],
-            ),
-          ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: label == 'Category'
+                            ? categoryColor
+                            : Colors.black87,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (value != 'Select Account' && value != 'Select Category')
+                    Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1216,45 +1347,52 @@ class _CalculatorTransactionScreenState
       crossAxisCount: 4,
       crossAxisSpacing: 8,
       mainAxisSpacing: 8,
+      childAspectRatio: 1.2,
       children: [
         _buildCalculatorButton(
-          '+',
-          color: Theme.of(context).colorScheme.primary,
-          onPressed: () => _onOperatorPressed('+'),
+          'C',
+          color: Colors.orange,
+          onPressed: _onClearPressed,
         ),
         _buildCalculatorButton('7', onPressed: () => _onNumberPressed('7')),
         _buildCalculatorButton('8', onPressed: () => _onNumberPressed('8')),
         _buildCalculatorButton('9', onPressed: () => _onNumberPressed('9')),
 
         _buildCalculatorButton(
-          '-',
+          '+',
           color: Theme.of(context).colorScheme.primary,
-          onPressed: () => _onOperatorPressed('-'),
+          onPressed: () => _onOperatorPressed('+'),
         ),
         _buildCalculatorButton('4', onPressed: () => _onNumberPressed('4')),
         _buildCalculatorButton('5', onPressed: () => _onNumberPressed('5')),
         _buildCalculatorButton('6', onPressed: () => _onNumberPressed('6')),
 
         _buildCalculatorButton(
-          '×',
+          '-',
           color: Theme.of(context).colorScheme.primary,
-          onPressed: () => _onOperatorPressed('×'),
+          onPressed: () => _onOperatorPressed('-'),
         ),
         _buildCalculatorButton('1', onPressed: () => _onNumberPressed('1')),
         _buildCalculatorButton('2', onPressed: () => _onNumberPressed('2')),
         _buildCalculatorButton('3', onPressed: () => _onNumberPressed('3')),
 
         _buildCalculatorButton(
-          '÷',
+          '×',
           color: Theme.of(context).colorScheme.primary,
-          onPressed: () => _onOperatorPressed('÷'),
+          onPressed: () => _onOperatorPressed('×'),
         ),
-        _buildCalculatorButton('0', onPressed: () => _onNumberPressed('0')),
-        _buildCalculatorButton('.', onPressed: _onDecimalPressed),
+
         _buildCalculatorButton(
           '=',
           color: Theme.of(context).colorScheme.primary,
           onPressed: _onEqualsPressed,
+        ),
+        _buildCalculatorButton('0', onPressed: () => _onNumberPressed('0')),
+        _buildCalculatorButton('.', onPressed: _onDecimalPressed),
+        _buildCalculatorButton(
+          '÷',
+          color: Theme.of(context).colorScheme.primary,
+          onPressed: () => _onOperatorPressed('÷'),
         ),
       ],
     );
@@ -1352,14 +1490,14 @@ class _CalculatorTransactionScreenState
           color: isSelected
               ? Theme.of(context).colorScheme.primary
               : (isNegativeBalance
-                    ? Colors.red.withOpacity(0.3)
+                    ? Colors.red.withValues(alpha: 0.3)
                     : Colors.transparent),
           width: isSelected ? 2 : 1,
         ),
         borderRadius: BorderRadius.circular(12),
         color: isSelected
-            ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
-            : (isNegativeBalance ? Colors.red.withOpacity(0.05) : null),
+            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
+            : (isNegativeBalance ? Colors.red.withValues(alpha: 0.05) : null),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.all(16),
@@ -1368,8 +1506,8 @@ class _CalculatorTransactionScreenState
           height: 48,
           decoration: BoxDecoration(
             color: isNegativeBalance
-                ? Colors.red.withOpacity(0.1)
-                : Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                ? Colors.red.withValues(alpha: 0.1)
+                : Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
@@ -1413,8 +1551,8 @@ class _CalculatorTransactionScreenState
                   ),
                   decoration: BoxDecoration(
                     color: isNegativeBalance
-                        ? Colors.red.withOpacity(0.1)
-                        : Colors.green.withOpacity(0.1),
+                        ? Colors.red.withValues(alpha: 0.1)
+                        : Colors.green.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -1434,7 +1572,7 @@ class _CalculatorTransactionScreenState
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
+                      color: Colors.red.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -1471,9 +1609,11 @@ class _CalculatorTransactionScreenState
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
+                  color: Colors.orange.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -1502,9 +1642,9 @@ class _CalculatorTransactionScreenState
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
+                  color: Colors.blue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                  border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [

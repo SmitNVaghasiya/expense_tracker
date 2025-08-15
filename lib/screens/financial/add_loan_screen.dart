@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:spendwise/models/loan.dart';
 import 'package:spendwise/models/account.dart';
-import 'package:spendwise/services/loan_service.dart';
 import 'package:spendwise/services/data_service.dart';
-import 'package:spendwise/widgets/common/index.dart' as common_widgets;
-import 'package:intl/intl.dart';
 import 'package:spendwise/services/currency_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -90,8 +87,8 @@ class _AddLoanScreenState extends State<AddLoanScreen> {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: isDueDate && _dueDate != null ? _dueDate! : _date,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 3650)),
+      firstDate: DateTime(1800),
+      lastDate: DateTime.now().add(const Duration(days: 36500)),
     );
 
     if (picked != null) {

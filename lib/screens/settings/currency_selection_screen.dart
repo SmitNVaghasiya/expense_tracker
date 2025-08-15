@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:spendwise/services/currency_provider.dart';
-import 'package:spendwise/widgets/common/index.dart' as common_widgets;
+
 import 'package:provider/provider.dart';
 
 class CurrencySelectionScreen extends StatefulWidget {

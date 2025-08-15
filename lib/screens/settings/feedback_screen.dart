@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:spendwise/widgets/common/index.dart' as common_widgets;
+
 
 class FeedbackScreen extends StatefulWidget {
   const FeedbackScreen({super.key});

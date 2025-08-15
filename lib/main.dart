@@ -11,6 +11,9 @@ void main() async {
   // Initialize notifications
   await BillReminderService.initializeNotifications();
 
+  // Initialize time format service
+  await TimeFormatService.initialize();
+
   // Set preferred orientations
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -73,8 +76,8 @@ class ExpenseTrackerApp extends StatelessWidget {
             ),
             useMaterial3: true,
             visualDensity: VisualDensity.adaptivePlatformDensity,
+            // Only change colors, not card designs - remove custom card styling
             scaffoldBackgroundColor: const Color(0xFF2C2C2C),
-            cardColor: const Color(0xFF3A3A3A),
             appBarTheme: const AppBarTheme(
               backgroundColor: Color(0xFF3A3A3A),
               foregroundColor: Colors.white,
@@ -90,17 +93,8 @@ class ExpenseTrackerApp extends StatelessWidget {
               type: BottomNavigationBarType.fixed,
               elevation: 8.0,
             ),
-            cardTheme: const CardThemeData(
-              color: Color(0xFF3A3A3A),
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.all(Radius.circular(12)),
-              ),
-            ),
+            // Remove custom card theme to maintain consistent design
             dividerTheme: const DividerThemeData(color: Color(0xFF4A4A4A)),
-            listTileTheme: const ListTileThemeData(
-              tileColor: Color(0xFF3A3A3A),
-            ),
             floatingActionButtonTheme: const FloatingActionButtonThemeData(
               elevation: 6.0,
               shape: CircleBorder(),

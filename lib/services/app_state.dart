@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:spendwise/models/transaction.dart';
 import 'package:spendwise/models/account.dart';
 import 'package:spendwise/models/budget.dart';
+import 'package:spendwise/models/overall_budget.dart';
 import 'package:spendwise/models/group.dart';
 import 'package:spendwise/services/data_service.dart';
 import 'package:spendwise/services/error_service.dart';
@@ -11,24 +12,28 @@ class AppState extends ChangeNotifier {
   List<Transaction> _transactions = [];
   List<Account> _accounts = [];
   List<Budget> _budgets = [];
+  List<OverallBudget> _overallBudgets = [];
   List<Group> _groups = [];
 
   // Loading states
   bool _isLoadingTransactions = false;
   bool _isLoadingAccounts = false;
   bool _isLoadingBudgets = false;
+  bool _isLoadingOverallBudgets = false;
   bool _isLoadingGroups = false;
 
   // Error states
   String? _transactionsError;
   String? _accountsError;
   String? _budgetsError;
+  String? _overallBudgetsError;
   String? _groupsError;
 
   // Getters
   List<Transaction> get transactions => _transactions;
   List<Account> get accounts => _accounts;
   List<Budget> get budgets => _budgets;
+  List<OverallBudget> get overallBudgets => _overallBudgets;
   List<Group> get groups => _groups;
 
   // Setters for testing
@@ -44,6 +49,11 @@ class AppState extends ChangeNotifier {
 
   set budgets(List<Budget> value) {
     _budgets = value;
+    notifyListeners();
+  }
+
+  set overallBudgets(List<OverallBudget> value) {
+    _overallBudgets = value;
     notifyListeners();
   }
 
@@ -75,11 +85,13 @@ class AppState extends ChangeNotifier {
   bool get isLoadingTransactions => _isLoadingTransactions;
   bool get isLoadingAccounts => _isLoadingAccounts;
   bool get isLoadingBudgets => _isLoadingBudgets;
+  bool get isLoadingOverallBudgets => _isLoadingOverallBudgets;
   bool get isLoadingGroups => _isLoadingGroups;
 
   String? get transactionsError => _transactionsError;
   String? get accountsError => _accountsError;
   String? get budgetsError => _budgetsError;
+  String? get overallBudgetsError => _overallBudgetsError;
   String? get groupsError => _groupsError;
 
   // Check if any data is loading
@@ -87,6 +99,7 @@ class AppState extends ChangeNotifier {
       _isLoadingTransactions ||
       _isLoadingAccounts ||
       _isLoadingBudgets ||
+      _isLoadingOverallBudgets ||
       _isLoadingGroups;
 
   // Check if there are any errors
@@ -94,6 +107,7 @@ class AppState extends ChangeNotifier {
       _transactionsError != null ||
       _accountsError != null ||
       _budgetsError != null ||
+      _overallBudgetsError != null ||
       _groupsError != null;
 
   // Get transactions by type
@@ -154,6 +168,7 @@ class AppState extends ChangeNotifier {
       loadTransactions(),
       loadAccounts(),
       loadBudgets(),
+      loadOverallBudgets(),
       loadGroups(),
     ]);
   }
@@ -221,6 +236,27 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // Load overall budgets
+  Future<void> loadOverallBudgets() async {
+    _setOverallBudgetsLoading(true);
+    _clearOverallBudgetsError();
+
+    try {
+      final overallBudgets = await DataService.getOverallBudgets();
+      _overallBudgets = overallBudgets;
+      notifyListeners();
+    } catch (e, stackTrace) {
+      _setOverallBudgetsError('Failed to load overall budgets: $e');
+      ErrorService.logError(
+        'Failed to load overall budgets',
+        context: 'AppState.loadOverallBudgets',
+        stackTrace: stackTrace,
+      );
+    } finally {
+      _setOverallBudgetsLoading(false);
+    }
+  }
+
   // Load groups
   Future<void> loadGroups() async {
     _setGroupsLoading(true);
@@ -248,51 +284,55 @@ class AppState extends ChangeNotifier {
       // Optimistic update - add to local state immediately
       _transactions.add(transaction);
       notifyListeners();
-      
+
       // Update account balance optimistically
       if (transaction.accountId != null) {
-        final accountIndex = _accounts.indexWhere((a) => a.id == transaction.accountId);
+        final accountIndex = _accounts.indexWhere(
+          (a) => a.id == transaction.accountId,
+        );
         if (accountIndex != -1) {
           final account = _accounts[accountIndex];
           double newBalance = account.balance;
-          
+
           if (transaction.type == 'income') {
             newBalance += transaction.amount;
           } else if (transaction.type == 'expense') {
             newBalance -= transaction.amount;
           }
-          
+
           _accounts[accountIndex] = account.copyWith(balance: newBalance);
           notifyListeners();
         }
       }
-      
+
       // Perform database operation in background
       await DataService.addTransaction(transaction);
       return true;
     } catch (e, stackTrace) {
       // Rollback optimistic update on error
       _transactions.removeWhere((t) => t.id == transaction.id);
-      
+
       // Rollback account balance
       if (transaction.accountId != null) {
-        final accountIndex = _accounts.indexWhere((a) => a.id == transaction.accountId);
+        final accountIndex = _accounts.indexWhere(
+          (a) => a.id == transaction.accountId,
+        );
         if (accountIndex != -1) {
           final account = _accounts[accountIndex];
           double newBalance = account.balance;
-          
+
           if (transaction.type == 'income') {
             newBalance -= transaction.amount;
           } else if (transaction.type == 'expense') {
             newBalance += transaction.amount;
           }
-          
+
           _accounts[accountIndex] = account.copyWith(balance: newBalance);
         }
       }
-      
+
       notifyListeners();
-      
+
       ErrorService.logError(
         'Failed to add transaction',
         context: 'AppState.addTransaction',
@@ -306,41 +346,45 @@ class AppState extends ChangeNotifier {
   Future<bool> updateTransaction(Transaction transaction) async {
     try {
       // Find the old transaction for rollback
-      final oldTransactionIndex = _transactions.indexWhere((t) => t.id == transaction.id);
+      final oldTransactionIndex = _transactions.indexWhere(
+        (t) => t.id == transaction.id,
+      );
       if (oldTransactionIndex == -1) return false;
-      
+
       final oldTransaction = _transactions[oldTransactionIndex];
-      
+
       // Optimistic update - update local state immediately
       _transactions[oldTransactionIndex] = transaction;
       notifyListeners();
-      
+
       // Update account balance optimistically
       if (transaction.accountId != null) {
-        final accountIndex = _accounts.indexWhere((a) => a.id == transaction.accountId);
+        final accountIndex = _accounts.indexWhere(
+          (a) => a.id == transaction.accountId,
+        );
         if (accountIndex != -1) {
           final account = _accounts[accountIndex];
           double newBalance = account.balance;
-          
+
           // Reverse old transaction effect
           if (oldTransaction.type == 'income') {
             newBalance -= oldTransaction.amount;
           } else if (oldTransaction.type == 'expense') {
             newBalance += oldTransaction.amount;
           }
-          
+
           // Apply new transaction effect
           if (transaction.type == 'income') {
             newBalance += transaction.amount;
           } else if (transaction.type == 'expense') {
             newBalance -= transaction.amount;
           }
-          
+
           _accounts[accountIndex] = account.copyWith(balance: newBalance);
           notifyListeners();
         }
       }
-      
+
       // Perform database operation in background
       await DataService.updateTransaction(transaction);
       return true;
@@ -348,7 +392,7 @@ class AppState extends ChangeNotifier {
       // Rollback optimistic update on error
       await loadTransactions(); // Reload to restore correct state
       await loadAccounts(); // Reload accounts to restore correct balances
-      
+
       ErrorService.logError(
         'Failed to update transaction',
         context: 'AppState.updateTransaction',
@@ -364,32 +408,34 @@ class AppState extends ChangeNotifier {
       // Find the transaction to delete for rollback
       final transactionIndex = _transactions.indexWhere((t) => t.id == id);
       if (transactionIndex == -1) return false;
-      
+
       final transactionToDelete = _transactions[transactionIndex];
-      
+
       // Optimistic update - remove from local state immediately
       _transactions.removeAt(transactionIndex);
       notifyListeners();
-      
+
       // Update account balance optimistically
       if (transactionToDelete.accountId != null) {
-        final accountIndex = _accounts.indexWhere((a) => a.id == transactionToDelete.accountId);
+        final accountIndex = _accounts.indexWhere(
+          (a) => a.id == transactionToDelete.accountId,
+        );
         if (accountIndex != -1) {
           final account = _accounts[accountIndex];
           double newBalance = account.balance;
-          
+
           // Reverse the transaction effect
           if (transactionToDelete.type == 'income') {
             newBalance -= transactionToDelete.amount;
           } else if (transactionToDelete.type == 'expense') {
             newBalance += transactionToDelete.amount;
           }
-          
+
           _accounts[accountIndex] = account.copyWith(balance: newBalance);
           notifyListeners();
         }
       }
-      
+
       // Perform database operation in background
       await DataService.deleteTransaction(id);
       return true;
@@ -397,7 +443,7 @@ class AppState extends ChangeNotifier {
       // Rollback optimistic update on error
       await loadTransactions(); // Reload to restore correct state
       await loadAccounts(); // Reload accounts to restore correct balances
-      
+
       ErrorService.logError(
         'Failed to delete transaction',
         context: 'AppState.deleteTransaction',
@@ -504,6 +550,54 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // Add overall budget
+  Future<bool> addOverallBudget(OverallBudget budget) async {
+    try {
+      await DataService.addOverallBudget(budget);
+      await loadOverallBudgets(); // Reload to get updated data
+      return true;
+    } catch (e, stackTrace) {
+      ErrorService.logError(
+        'Failed to add overall budget',
+        context: 'AppState.addOverallBudget',
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
+  }
+
+  // Update overall budget
+  Future<bool> updateOverallBudget(OverallBudget budget) async {
+    try {
+      await DataService.updateOverallBudget(budget);
+      await loadOverallBudgets(); // Reload to get updated data
+      return true;
+    } catch (e, stackTrace) {
+      ErrorService.logError(
+        'Failed to update overall budget',
+        context: 'AppState.updateOverallBudget',
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
+  }
+
+  // Delete overall budget
+  Future<bool> deleteOverallBudget(String id) async {
+    try {
+      await DataService.deleteOverallBudget(id);
+      await loadOverallBudgets(); // Reload to get updated data
+      return true;
+    } catch (e, stackTrace) {
+      ErrorService.logError(
+        'Failed to delete overall budget',
+        context: 'AppState.deleteOverallBudget',
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
+  }
+
   // Add group
   Future<bool> addGroup(Group group) async {
     try {
@@ -576,6 +670,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _setOverallBudgetsLoading(bool loading) {
+    _isLoadingOverallBudgets = loading;
+    notifyListeners();
+  }
+
   void _setGroupsLoading(bool loading) {
     _isLoadingGroups = loading;
     notifyListeners();
@@ -596,6 +695,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _setOverallBudgetsError(String? error) {
+    _overallBudgetsError = error;
+    notifyListeners();
+  }
+
   void _setGroupsError(String? error) {
     _groupsError = error;
     notifyListeners();
@@ -613,6 +717,11 @@ class AppState extends ChangeNotifier {
 
   void _clearBudgetsError() {
     _budgetsError = null;
+    notifyListeners();
+  }
+
+  void _clearOverallBudgetsError() {
+    _overallBudgetsError = null;
     notifyListeners();
   }
 

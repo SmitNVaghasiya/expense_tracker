@@ -61,7 +61,6 @@ class _LoansScreenState extends State<LoansScreen>
     super.dispose();
   }
 
-  @override
   Future<void> _loadData() async {
     _isLoadingNotifier.value = true;
 

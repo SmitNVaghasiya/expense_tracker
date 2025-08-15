@@ -391,22 +391,22 @@ extension ListExtension<T> on List<T> {
 extension ColorExtension on Color {
   Color get lighter {
     return withValues(
-      red: ((red + (255 - red) * 0.3) / 255.0).clamp(0.0, 1.0),
-      green: ((green + (255 - green) * 0.3) / 255.0).clamp(0.0, 1.0),
-      blue: ((blue + (255 - blue) * 0.3) / 255.0).clamp(0.0, 1.0),
+      red: ((r + (255 - r) * 0.3) / 255.0).clamp(0.0, 1.0),
+      green: ((g + (255 - g) * 0.3) / 255.0).clamp(0.0, 1.0),
+      blue: ((b + (255 - b) * 0.3) / 255.0).clamp(0.0, 1.0),
     );
   }
 
   Color get darker {
     return withValues(
-      red: (red * 0.7).clamp(0.0, 1.0),
-      green: (green * 0.7).clamp(0.0, 1.0),
-      blue: (blue * 0.7).clamp(0.0, 1.0),
+      red: (r * 0.7).clamp(0.0, 1.0),
+      green: (g * 0.7).clamp(0.0, 1.0),
+      blue: (b * 0.7).clamp(0.0, 1.0),
     );
   }
 
   bool get isLight {
-    return (red * 0.299 + green * 0.587 + blue * 0.114) > 186;
+    return (r * 0.299 + g * 0.587 + b * 0.114) > 186;
   }
 
   bool get isDark {

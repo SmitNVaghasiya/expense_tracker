@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:spendwise/services/theme_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:spendwise/widgets/common/index.dart' as common_widgets;
+
 
 class ThemeSelectionScreen extends StatelessWidget {
   const ThemeSelectionScreen({super.key});

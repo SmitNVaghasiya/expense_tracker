@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:spendwise/widgets/common/index.dart' as common_widgets;
+
 
 class HelpScreen extends StatelessWidget {
   const HelpScreen({super.key});

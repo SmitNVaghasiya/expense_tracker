@@ -76,7 +76,7 @@ class BudgetCard extends StatelessWidget {
                       size: isCompact ? 20 : 24,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(width: 12),
 
                   // Budget Details
                   Expanded(
@@ -87,49 +87,40 @@ class BudgetCard extends StatelessWidget {
                           budget.name,
                           style: TextStyle(
                             fontSize: isCompact ? 14 : 16,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.bold,
                             color: Theme.of(context).colorScheme.onSurface,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                        if (!isCompact) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            budget.category,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withOpacity(0.7),
-                            ),
+                        Text(
+                          budget.category,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.7),
                           ),
-                        ],
-                        if (!isCompact) ...[
-                          const SizedBox(height: 2),
+                        ),
+                        if (!isCompact)
                           Text(
                             '${DateFormat('MMM dd').format(budget.startDate)} - ${DateFormat('MMM dd').format(budget.endDate)}',
                             style: TextStyle(
                               fontSize: 11,
                               color: Theme.of(
                                 context,
-                              ).colorScheme.onSurface.withOpacity(0.6),
+                              ).colorScheme.onSurface.withOpacity(0.5),
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
                       ],
                     ),
                   ),
 
-                  // Budget Amounts
+                  // Budget Amount
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
                         NumberFormat.currency(
-                          symbol: '\$',
+                          symbol: '₹',
                           decimalDigits: 2,
                         ).format(budget.limit),
                         style: TextStyle(
@@ -138,17 +129,16 @@ class BudgetCard extends StatelessWidget {
                           color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
-                      if (!isCompact) ...[
-                        const SizedBox(height: 4),
+                      if (!isCompact)
                         Text(
-                          '${NumberFormat.currency(symbol: '\$', decimalDigits: 2).format(spentAmount)} spent',
+                          '${NumberFormat.currency(symbol: '₹', decimalDigits: 2).format(spentAmount)} spent',
                           style: TextStyle(
-                            fontSize: 11,
-                            color: getBudgetColor(),
-                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.7),
                           ),
                         ),
-                      ],
                     ],
                   ),
                 ],
@@ -156,7 +146,7 @@ class BudgetCard extends StatelessWidget {
 
               // Progress Bar
               if (!isCompact) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -173,10 +163,10 @@ class BudgetCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '${(progressPercentage * 100).toInt()}%',
+                          '${(progressPercentage * 100).toStringAsFixed(1)}%',
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.bold,
                             color: getProgressColor(),
                           ),
                         ),
@@ -187,58 +177,61 @@ class BudgetCard extends StatelessWidget {
                       value: progressPercentage,
                       backgroundColor: Theme.of(
                         context,
-                      ).colorScheme.outline.withOpacity(0.2),
+                      ).colorScheme.surfaceVariant,
                       valueColor: AlwaysStoppedAnimation<Color>(
                         getProgressColor(),
                       ),
+                      minHeight: 8,
                       borderRadius: BorderRadius.circular(4),
-                      minHeight: 6,
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Remaining: ${NumberFormat.currency(symbol: '\$', decimalDigits: 2).format(remainingAmount)}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withOpacity(0.6),
-                          ),
-                        ),
-                        if (isOverBudget)
-                          Text(
-                            'Over by ${NumberFormat.currency(symbol: '\$', decimalDigits: 2).format(-remainingAmount)}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.red,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                      ],
+                  ],
+                ),
+              ],
+
+              // Budget Status
+              if (!isCompact) ...[
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isOverBudget ? 'Over Budget' : 'Remaining',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: getBudgetColor(),
+                      ),
+                    ),
+                    Text(
+                      isOverBudget
+                          ? 'Over by ${NumberFormat.currency(symbol: '₹', decimalDigits: 2).format(-remainingAmount)}'
+                          : 'Remaining: ${NumberFormat.currency(symbol: '₹', decimalDigits: 2).format(remainingAmount)}',
+                      style: TextStyle(fontSize: 12, color: getBudgetColor()),
                     ),
                   ],
                 ),
               ],
 
               // Actions Row
-              if (showActions && (onEdit != null || onDelete != null)) ...[
-                const SizedBox(height: 12),
+              if (showActions && !isCompact) ...[
+                const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     if (onEdit != null)
                       TextButton.icon(
                         onPressed: onEdit,
-                        icon: const Icon(Icons.edit, size: 16),
-                        label: const Text('Edit'),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
+                        icon: Icon(
+                          Icons.edit,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        label: Text(
+                          'Edit',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.primary,
                           ),
-                          minimumSize: const Size(0, 0),
                         ),
                       ),
                     if (onEdit != null && onDelete != null)
@@ -246,15 +239,17 @@ class BudgetCard extends StatelessWidget {
                     if (onDelete != null)
                       TextButton.icon(
                         onPressed: onDelete,
-                        icon: const Icon(Icons.delete, size: 16),
-                        label: const Text('Delete'),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
+                        icon: Icon(
+                          Icons.delete,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        label: Text(
+                          'Delete',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.error,
                           ),
-                          minimumSize: const Size(0, 0),
-                          foregroundColor: Colors.red,
                         ),
                       ),
                   ],
