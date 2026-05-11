@@ -3,7 +3,7 @@ import 'package:uuid/uuid.dart';
 class Loan {
   final String id;
   final String type; // 'lent' or 'borrowed'
-  final String person;
+  final String person; // For simple loans, the person's name. For formal, the bank's name.
   final double amount;
   final DateTime date;
   final DateTime? dueDate;
@@ -11,11 +11,18 @@ class Loan {
   final String? notes;
 
   // New fields for enhanced loan management
+  final String loanCategory; // 'personal' or 'formal'
   final String? accountId; // Account from which money is lent/borrowed
-  final String?
-  paymentFrequency; // 'monthly', 'weekly', 'biweekly', 'quarterly', 'yearly', 'one-time'
-  final int? paymentDay; // Day of month for payment (1-31)
-  final double? monthlyPayment; // Monthly payment amount
+  
+  // Fields for formal, amortized loans
+  final double? interestRate; // Annual Percentage Rate (APR)
+  final int? termInMonths; // The total term of the loan in months
+
+  // Fields for scheduled payments
+  final String? paymentFrequency; // 'monthly', 'weekly', 'one-time'
+  final double? monthlyPayment; // EMI or scheduled payment amount
+  
+  // Tracking fields
   final double paidAmount; // Total amount paid so far
   final List<LoanPayment> paymentHistory; // History of payments made
   final bool autoDeduct; // Whether to automatically deduct from account
@@ -31,17 +38,19 @@ class Loan {
     this.dueDate,
     this.status = 'pending',
     this.notes,
+    this.loanCategory = 'personal',
     this.accountId,
+    this.interestRate,
+    this.termInMonths,
     this.paymentFrequency,
-    this.paymentDay,
     this.monthlyPayment,
     this.paidAmount = 0.0,
     this.paymentHistory = const [],
     this.autoDeduct = false,
     this.nextPaymentDate,
     DateTime? createdAt,
-  }) : id = id ?? const Uuid().v4(),
-       createdAt = createdAt ?? DateTime.now();
+  })  : id = id ?? const Uuid().v4(),
+        createdAt = createdAt ?? DateTime.now();
 
   // Get remaining amount to be paid
   double get remainingAmount => amount - paidAmount;
@@ -78,7 +87,6 @@ class Loan {
       'notes': notes,
       'accountId': accountId,
       'paymentFrequency': paymentFrequency,
-      'paymentDay': paymentDay,
       'monthlyPayment': monthlyPayment,
       'paidAmount': paidAmount,
       'autoDeduct': autoDeduct ? 1 : 0,
@@ -99,7 +107,6 @@ class Loan {
       notes: json['notes'],
       accountId: json['accountId'],
       paymentFrequency: json['paymentFrequency'],
-      paymentDay: json['paymentDay'],
       monthlyPayment: json['monthlyPayment'],
       paidAmount: json['paidAmount'] ?? 0.0,
       createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : DateTime.now(),
@@ -126,7 +133,6 @@ class Loan {
     String? notes,
     String? accountId,
     String? paymentFrequency,
-    int? paymentDay,
     double? monthlyPayment,
     double? paidAmount,
     List<LoanPayment>? paymentHistory,
@@ -145,7 +151,6 @@ class Loan {
       notes: notes ?? this.notes,
       accountId: accountId ?? this.accountId,
       paymentFrequency: paymentFrequency ?? this.paymentFrequency,
-      paymentDay: paymentDay ?? this.paymentDay,
       monthlyPayment: monthlyPayment ?? this.monthlyPayment,
       paidAmount: paidAmount ?? this.paidAmount,
       paymentHistory: paymentHistory ?? this.paymentHistory,

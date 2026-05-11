@@ -502,7 +502,7 @@ class _AddEditGoalSheetState extends State<_AddEditGoalSheet> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _goalType,
+                    initialValue: _goalType,
                     decoration: const InputDecoration(
                       labelText: 'Goal Type',
                       border: OutlineInputBorder(),

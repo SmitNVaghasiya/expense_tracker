@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:spendwise/models/transaction.dart';
-import 'package:spendwise/models/account.dart';
 
-import 'package:spendwise/services/app_state.dart';
+import 'package:spendwise/services/optimized_app_state.dart';
 import 'package:spendwise/widgets/common/index.dart' as common_widgets;
+import 'package:spendwise/services/currency_provider.dart';
 import 'package:spendwise/core/performance_mixins.dart';
 
 import 'package:spendwise/screens/transactions/calculator_transaction_screen.dart';
@@ -58,19 +58,20 @@ class _BaseTransactionScreenState extends State<BaseTransactionScreen>
     _isLoadingNotifier.value = true;
 
     try {
-      final appState = Provider.of<AppState>(context, listen: false);
+      final appState = Provider.of<OptimizedAppState>(context, listen: false);
 
       // Load data from AppState if available, otherwise load from DataService
       List<Transaction> transactions;
-      List<Account> accounts;
 
       if (appState.transactions.isNotEmpty) {
         transactions = appState.transactions;
-        accounts = appState.accounts;
       } else {
-        await appState.loadAllData();
+        // Load essential data for current period
+        await appState.loadEssentialData(
+          filterPeriod: 'monthly', // Default to monthly view
+          selectedDate: DateTime.now(),
+        );
         transactions = appState.transactions;
-        accounts = appState.accounts;
       }
 
       if (mounted) {
@@ -83,7 +84,6 @@ class _BaseTransactionScreenState extends State<BaseTransactionScreen>
         });
       }
     } catch (e) {
-      debugPrint('Error loading ${widget.transactionType}s: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -230,10 +230,6 @@ class _BaseTransactionScreenState extends State<BaseTransactionScreen>
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _navigateToAddTransaction(),
-        backgroundColor: widget.transactionType == 'expense'
-            ? Colors.red
-            : Colors.green,
-        foregroundColor: Colors.white,
         child: const Icon(Icons.add),
       ),
     );
@@ -295,6 +291,7 @@ class _BaseTransactionScreenState extends State<BaseTransactionScreen>
   }
 
   Widget _buildTransactionList(List<Transaction> transactions) {
+    final currencyProvider = Provider.of<CurrencyProvider>(context, listen: false);
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: transactions.length,
@@ -305,6 +302,7 @@ class _BaseTransactionScreenState extends State<BaseTransactionScreen>
           onTap: () => _showTransactionDetails(transaction),
           onEdit: () => _editTransaction(transaction),
           onDelete: () => _deleteTransaction(transaction),
+          currencySymbol: currencyProvider.currencySymbol,
         );
       },
     );
@@ -402,7 +400,7 @@ class _BaseTransactionScreenState extends State<BaseTransactionScreen>
           children: [
             // Category Filter
             DropdownButtonFormField<String>(
-              value: _selectedCategoryNotifier.value,
+              initialValue: _selectedCategoryNotifier.value,
               decoration: const InputDecoration(labelText: 'Category'),
               items: _categories
                   .map(
@@ -513,9 +511,13 @@ class _BaseTransactionScreenState extends State<BaseTransactionScreen>
   }
 
   Future<void> _deleteTransaction(Transaction transaction) async {
+    // Store context before async operations
+    final currentContext = context;
+    final scaffoldMessenger = ScaffoldMessenger.of(currentContext);
+    
     // Show confirmation dialog
     bool? confirm = await showModalBottomSheet<bool>(
-      context: context,
+      context: currentContext,
       isScrollControlled: true,
       builder: (BuildContext context) {
         return common_widgets.ConfirmationBottomSheet(
@@ -534,11 +536,12 @@ class _BaseTransactionScreenState extends State<BaseTransactionScreen>
 
     if (confirm == true) {
       try {
-        final appState = Provider.of<AppState>(context, listen: false);
-        final success = await appState.deleteTransaction(transaction.id);
+        // ignore: use_build_context_synchronously
+        final appState = Provider.of<OptimizedAppState>(currentContext, listen: false);
+        await appState.deleteTransactionOptimistically(transaction.id);
 
-        if (success && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+        if (mounted) {
+          scaffoldMessenger.showSnackBar(
             SnackBar(
               content: Text(
                 '${widget.transactionType.capitalize()} deleted successfully',
@@ -554,18 +557,10 @@ class _BaseTransactionScreenState extends State<BaseTransactionScreen>
               .toList();
           _transactionsNotifier.value = updatedTransactions;
           _applyFilters();
-        } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to delete ${widget.transactionType}'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 5),
-            ),
-          );
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          scaffoldMessenger.showSnackBar(
             SnackBar(
               content: Text('Error deleting ${widget.transactionType}: $e'),
               backgroundColor: Colors.red,

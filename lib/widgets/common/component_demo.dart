@@ -12,7 +12,6 @@ class ComponentDemoScreen extends StatefulWidget {
 }
 
 class _ComponentDemoScreenState extends State<ComponentDemoScreen> {
-  String _searchQuery = '';
   String _selectedCategory = 'All';
   DateTime? _startDate;
   DateTime? _endDate;
@@ -73,9 +72,7 @@ class _ComponentDemoScreenState extends State<ComponentDemoScreen> {
             common_widgets.SearchBar(
               hintText: 'Search transactions...',
               onSearchChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
+                // Search functionality demo
               },
             ),
 
@@ -122,6 +119,7 @@ class _ComponentDemoScreenState extends State<ComponentDemoScreen> {
               accountName: _sampleAccount.name,
               onEdit: () => _showSnackBar('Edit transaction'),
               onDelete: () => _showSnackBar('Delete transaction'),
+              currencySymbol: '₹',
             ),
 
             const SizedBox(height: 16),

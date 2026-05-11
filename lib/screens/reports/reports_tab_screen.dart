@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:spendwise/screens/shared/custom_drawer.dart';
 import 'package:spendwise/screens/reports/widgets/reports_summary_card.dart';
 import 'package:spendwise/screens/reports/widgets/reports_charts.dart';
 import 'package:spendwise/screens/reports/widgets/reports_analytics.dart';
@@ -7,7 +8,7 @@ import 'package:spendwise/screens/reports/widgets/reports_budget_adherence.dart'
 import 'package:spendwise/screens/reports/widgets/reports_date_filter.dart';
 import 'package:spendwise/services/reports/reports_data_service.dart';
 import 'package:spendwise/screens/transactions/calculator_transaction_screen.dart';
-import 'package:intl/intl.dart';
+
 
 class ReportsTabScreen extends StatefulWidget {
   const ReportsTabScreen({super.key});
@@ -24,7 +25,7 @@ class _ReportsTabScreenState extends State<ReportsTabScreen> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _dataService = ReportsDataService();
     _loadData();
   }
@@ -36,12 +37,14 @@ class _ReportsTabScreenState extends State<ReportsTabScreen> with SingleTickerPr
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
     });
 
     await _dataService.loadData();
 
+    if (!mounted) return;
     setState(() {
       _isLoading = false;
     });
@@ -75,6 +78,7 @@ class _ReportsTabScreenState extends State<ReportsTabScreen> with SingleTickerPr
       },
     );
 
+    if (!mounted) return;
     if (picked != null) {
       setState(() {
         _dataService.selectedDateRange = picked;
@@ -99,6 +103,7 @@ class _ReportsTabScreenState extends State<ReportsTabScreen> with SingleTickerPr
       ),
     );
 
+    if (!mounted) return;
     if (result == true) {
       _loadData();
     }
@@ -116,7 +121,6 @@ class _ReportsTabScreenState extends State<ReportsTabScreen> with SingleTickerPr
             Tab(text: 'Overview', icon: Icon(Icons.dashboard)),
             Tab(text: 'Analytics', icon: Icon(Icons.analytics)),
             Tab(text: 'Budget', icon: Icon(Icons.account_balance_wallet)),
-            Tab(text: 'Trends', icon: Icon(Icons.trending_up)),
           ],
         ),
         actions: [
@@ -149,6 +153,7 @@ class _ReportsTabScreenState extends State<ReportsTabScreen> with SingleTickerPr
         onPressed: _handleAddTransaction,
         child: const Icon(Icons.add),
       ),
+      drawer: const CustomDrawer(),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -159,7 +164,6 @@ class _ReportsTabScreenState extends State<ReportsTabScreen> with SingleTickerPr
                   _buildOverviewTab(),
                   _buildAnalyticsTab(),
                   _buildBudgetTab(),
-                  _buildTrendsTab(),
                 ],
               ),
             ),
@@ -289,52 +293,6 @@ class _ReportsTabScreenState extends State<ReportsTabScreen> with SingleTickerPr
               yearlyBudgetAdherence: _dataService.yearlyBudgetAdherence,
               budgetAdherencePeriod: _dataService.budgetAdherencePeriod,
               onPeriodChanged: _onBudgetPeriodChanged,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTrendsTab() {
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Monthly Trends (already in Overview, but can be expanded here)
-            if (_dataService.monthlyData.isNotEmpty) ...[
-              const Text(
-                'Monthly Trends',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              // You can add more trend analysis here
-              Text(
-                'Showing ${_dataService.monthlyData.length} months of data',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
-
-            // Additional trend analysis can be added here
-            const Text(
-              'Trend Analysis',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text(
-                  'More trend analysis features coming soon...',
-                  style: TextStyle(fontSize: 16),
-                ),
-              ),
             ),
           ],
         ),

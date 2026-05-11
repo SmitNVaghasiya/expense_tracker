@@ -107,7 +107,7 @@ class ActionBottomSheet extends StatelessWidget {
                 fontSize: 14,
                 color:
                     action.subtitleColor ??
-                    Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                    Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
               ),
             )
           : null,

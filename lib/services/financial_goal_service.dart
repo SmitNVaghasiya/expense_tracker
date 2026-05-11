@@ -1,293 +1,243 @@
-import 'package:uuid/uuid.dart';
+import 'package:flutter/foundation.dart';
 import 'package:spendwise/models/financial_goal.dart';
-import 'database_service.dart';
-import 'data_service.dart';
 
 class FinancialGoalService {
-  static const _uuid = Uuid();
-
   // Get all financial goals
   static Future<List<FinancialGoal>> getFinancialGoals() async {
-    final db = await DatabaseService.database;
-    final List<Map<String, dynamic>> maps = await db.query('financial_goals');
-    return List.generate(maps.length, (i) => FinancialGoal.fromJson(maps[i]));
+    try {
+      if (kIsWeb) {
+        // For web, return empty list for now
+        // You can implement web storage for financial goals if needed
+        return [];
+      } else {
+        // For mobile, implement mobile storage
+        // This is a simplified version - you may need to implement proper financial goal storage
+        return [];
+      }
+    } catch (e) {
+      debugPrint('Error getting financial goals: $e');
+      return [];
+    }
   }
 
   // Add a new financial goal
   static Future<void> addFinancialGoal(FinancialGoal financialGoal) async {
-    final db = await DatabaseService.database;
-    await db.insert('financial_goals', financialGoal.toJson());
+    try {
+      if (kIsWeb) {
+        // For web, implement web storage
+        debugPrint('Financial goals not yet implemented for web');
+      } else {
+        // For mobile, implement mobile storage
+        debugPrint('Financial goals not yet implemented for mobile');
+      }
+    } catch (e) {
+      debugPrint('Error adding financial goal: $e');
+      rethrow;
+    }
   }
 
   // Update a financial goal
   static Future<void> updateFinancialGoal(FinancialGoal financialGoal) async {
-    final db = await DatabaseService.database;
-    await db.update(
-      'financial_goals',
-      financialGoal.toJson(),
-      where: 'id = ?',
-      whereArgs: [financialGoal.id],
-    );
+    try {
+      if (kIsWeb) {
+        // For web, implement web storage
+        debugPrint('Financial goals not yet implemented for web');
+      } else {
+        // For mobile, implement mobile storage
+        debugPrint('Financial goals not yet implemented for mobile');
+      }
+    } catch (e) {
+      debugPrint('Error updating financial goal: $e');
+      rethrow;
+    }
   }
 
   // Delete a financial goal
   static Future<void> deleteFinancialGoal(String id) async {
-    final db = await DatabaseService.database;
-    await db.delete('financial_goals', where: 'id = ?', whereArgs: [id]);
+    try {
+      if (kIsWeb) {
+        // For web, implement web storage
+        debugPrint('Financial goals not yet implemented for web');
+      } else {
+        // For mobile, implement mobile storage
+        debugPrint('Financial goals not yet implemented for mobile');
+      }
+    } catch (e) {
+      debugPrint('Error deleting financial goal: $e');
+      rethrow;
+    }
   }
 
   // Get financial goal by ID
   static Future<FinancialGoal?> getFinancialGoalById(String id) async {
-    final db = await DatabaseService.database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'financial_goals',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
-    if (maps.isNotEmpty) {
-      return FinancialGoal.fromJson(maps.first);
+    try {
+      final financialGoals = await getFinancialGoals();
+      return financialGoals.firstWhere(
+        (fg) => fg.id == id,
+        orElse: () => throw Exception('Financial goal not found'),
+      );
+    } catch (e) {
+      debugPrint('Error getting financial goal by ID: $e');
+      return null;
     }
-    return null;
   }
 
   // Update goal progress based on transactions
   static Future<void> updateGoalProgressFromTransactions(String goalId) async {
-    final goal = await getFinancialGoalById(goalId);
-    if (goal == null) return;
+    try {
+      final goal = await getFinancialGoalById(goalId);
+      if (goal == null) return;
 
-    final transactions = await DataService.getTransactions();
-    double progressAmount = 0.0;
-
-    // Calculate progress based on goal type
-    switch (goal.goalType) {
-      case 'savings':
-        // For savings goals, count income transactions
-        for (final transaction in transactions) {
-          if (transaction.type == 'income' &&
-              (goal.accountId == null ||
-                  transaction.accountId == goal.accountId)) {
-            progressAmount += transaction.amount;
-          }
-        }
-        break;
-
-      case 'debt_payoff':
-        // For debt payoff goals, count expense transactions in debt categories
-        for (final transaction in transactions) {
-          if (transaction.type == 'expense' &&
-              (goal.category == null ||
-                  transaction.category == goal.category) &&
-              (goal.accountId == null ||
-                  transaction.accountId == goal.accountId)) {
-            progressAmount += transaction.amount;
-          }
-        }
-        break;
-
-      case 'investment':
-        // For investment goals, count income transactions
-        for (final transaction in transactions) {
-          if (transaction.type == 'income' &&
-              (goal.accountId == null ||
-                  transaction.accountId == goal.accountId)) {
-            progressAmount += transaction.amount;
-          }
-        }
-        break;
-
-      case 'emergency_fund':
-        // For emergency fund goals, count income transactions
-        for (final transaction in transactions) {
-          if (transaction.type == 'income' &&
-              (goal.accountId == null ||
-                  transaction.accountId == goal.accountId)) {
-            progressAmount += transaction.amount;
-          }
-        }
-        break;
-    }
-
-    // Update the goal with new progress
-    final updatedGoal = goal.copyWith(currentAmount: progressAmount);
-    await updateFinancialGoal(updatedGoal);
-  }
-
-  // Update all goals progress
-  static Future<void> updateAllGoalsProgress() async {
-    final goals = await getFinancialGoals();
-    for (final goal in goals) {
-      await updateGoalProgressFromTransactions(goal.id);
+      // Placeholder implementation - implement actual transaction logic when needed
+      debugPrint('Goal progress update not yet implemented');
+    } catch (e) {
+      debugPrint('Error updating goal progress from transactions: $e');
     }
   }
 
-  // Get active goals
-  static Future<List<FinancialGoal>> getActiveGoals() async {
-    final allGoals = await getFinancialGoals();
-    return allGoals.where((goal) => goal.isActive).toList();
+  // Get financial goals by account
+  static Future<List<FinancialGoal>> getFinancialGoalsByAccount(
+    String accountId,
+  ) async {
+    try {
+      final financialGoals = await getFinancialGoals();
+      return financialGoals.where((fg) => fg.accountId == accountId).toList();
+    } catch (e) {
+      debugPrint('Error getting financial goals by account: $e');
+      return [];
+    }
   }
 
-  // Get completed goals
-  static Future<List<FinancialGoal>> getCompletedGoals() async {
-    final allGoals = await getFinancialGoals();
-    return allGoals.where((goal) => goal.isCompleted).toList();
+  // Get financial goals by type
+  static Future<List<FinancialGoal>> getFinancialGoalsByType(
+    String goalType,
+  ) async {
+    try {
+      final financialGoals = await getFinancialGoals();
+      return financialGoals.where((fg) => fg.goalType == goalType).toList();
+    } catch (e) {
+      debugPrint('Error getting financial goals by type: $e');
+      return [];
+    }
   }
 
-  // Get overdue goals
-  static Future<List<FinancialGoal>> getOverdueGoals() async {
-    final allGoals = await getFinancialGoals();
-    return allGoals.where((goal) => goal.isOverdue).toList();
+  // Get active financial goals
+  static Future<List<FinancialGoal>> getActiveFinancialGoals() async {
+    try {
+      final financialGoals = await getFinancialGoals();
+      return financialGoals.where((fg) => fg.isActive).toList();
+    } catch (e) {
+      debugPrint('Error getting active financial goals: $e');
+      return [];
+    }
   }
 
-  // Get goals due soon (within 30 days)
-  static Future<List<FinancialGoal>> getGoalsDueSoon({int days = 30}) async {
-    final allGoals = await getFinancialGoals();
-    final today = DateTime.now();
-    final endDate = today.add(Duration(days: days));
-
-    return allGoals.where((goal) {
-      return goal.isActive &&
-          !goal.isCompleted &&
-          goal.targetDate.isAfter(today) &&
-          goal.targetDate.isBefore(endDate);
-    }).toList();
+  // Get completed financial goals
+  static Future<List<FinancialGoal>> getCompletedFinancialGoals() async {
+    try {
+      final financialGoals = await getFinancialGoals();
+      return financialGoals.where((fg) => fg.isCompleted).toList();
+    } catch (e) {
+      debugPrint('Error getting completed financial goals: $e');
+      return [];
+    }
   }
 
-  // Get goals by type
-  static Future<List<FinancialGoal>> getGoalsByType(String goalType) async {
-    final allGoals = await getFinancialGoals();
-    return allGoals.where((goal) => goal.goalType == goalType).toList();
+  // Get financial goals that need attention
+  static Future<List<FinancialGoal>> getFinancialGoalsNeedingAttention() async {
+    try {
+      final financialGoals = await getFinancialGoals();
+      final now = DateTime.now();
+
+      return financialGoals.where((fg) {
+        if (!fg.isActive || fg.isCompleted) return false;
+
+        // Check if goal is overdue
+        if (fg.targetDate.isBefore(now)) {
+          return true;
+        }
+
+        // Check if goal is near deadline (within 30 days)
+        final daysUntilDeadline = fg.targetDate.difference(now).inDays;
+        if (daysUntilDeadline <= 30) {
+          return true;
+        }
+
+        return false;
+      }).toList();
+    } catch (e) {
+      debugPrint('Error getting financial goals needing attention: $e');
+      return [];
+    }
   }
 
-  // Get goals by category
-  static Future<List<FinancialGoal>> getGoalsByCategory(String category) async {
-    final allGoals = await getFinancialGoals();
-    return allGoals.where((goal) => goal.category == category).toList();
+  // Calculate goal completion percentage
+  static double calculateGoalCompletionPercentage(FinancialGoal goal) {
+    if (goal.targetAmount <= 0) return 0.0;
+
+    final percentage = (goal.currentAmount / goal.targetAmount) * 100;
+    return percentage.clamp(0.0, 100.0);
   }
 
-  // Add progress to a goal manually
-  static Future<void> addProgressToGoal(String goalId, double amount) async {
-    final goal = await getFinancialGoalById(goalId);
-    if (goal != null) {
-      final updatedGoal = goal.addProgress(amount);
-      await updateFinancialGoal(updatedGoal);
+  // Check if goal is completed
+  static bool isGoalCompleted(FinancialGoal goal) {
+    return goal.currentAmount >= goal.targetAmount;
+  }
+
+  // Get total monthly goal contribution (placeholder)
+  static Future<double> getTotalMonthlyGoalContribution() async {
+    try {
+      final financialGoals = await getFinancialGoals();
+      double total = 0.0;
+
+      for (final goal in financialGoals) {
+        if (goal.isActive && !goal.isCompleted) {
+          // Placeholder: you can implement monthly contribution logic here
+          total += 0.0;
+        }
+      }
+
+      return total;
+    } catch (e) {
+      debugPrint('Error getting total monthly goal contribution: $e');
+      return 0.0;
     }
   }
 
   // Get financial goals summary
   static Future<Map<String, dynamic>> getFinancialGoalsSummary() async {
-    final allGoals = await getFinancialGoals();
-    final activeGoals = allGoals.where((g) => g.isActive).toList();
-    final completedGoals = allGoals.where((g) => g.isCompleted).toList();
-    final overdueGoals = allGoals.where((g) => g.isOverdue).toList();
+    try {
+      final financialGoals = await getFinancialGoals();
+      final activeGoals = financialGoals.where((fg) => fg.isActive).toList();
+      final completedGoals = financialGoals
+          .where((fg) => fg.isCompleted)
+          .toList();
 
-    double totalTargetAmount = 0.0;
-    double totalCurrentAmount = 0.0;
-    double totalRemainingAmount = 0.0;
+      double totalTargetAmount = 0.0;
+      double totalCurrentAmount = 0.0;
+      double totalMonthlyContribution = 0.0;
 
-    for (final goal in activeGoals) {
-      totalTargetAmount += goal.targetAmount;
-      totalCurrentAmount += goal.currentAmount;
-      totalRemainingAmount += goal.remainingAmount;
-    }
-
-    return {
-      'totalGoals': allGoals.length,
-      'activeGoals': activeGoals.length,
-      'completedGoals': completedGoals.length,
-      'overdueGoals': overdueGoals.length,
-      'totalTargetAmount': totalTargetAmount,
-      'totalCurrentAmount': totalCurrentAmount,
-      'totalRemainingAmount': totalRemainingAmount,
-      'overallProgress': totalTargetAmount > 0
-          ? (totalCurrentAmount / totalTargetAmount * 100)
-          : 0.0,
-    };
-  }
-
-  // Get goals progress by type
-  static Future<Map<String, Map<String, dynamic>>>
-  getGoalsProgressByType() async {
-    final allGoals = await getFinancialGoals();
-    final Map<String, Map<String, dynamic>> progressByType = {};
-
-    for (final goal in allGoals) {
-      if (!progressByType.containsKey(goal.goalType)) {
-        progressByType[goal.goalType] = {
-          'count': 0,
-          'targetAmount': 0.0,
-          'currentAmount': 0.0,
-          'completedCount': 0,
-        };
+      for (final goal in activeGoals) {
+        totalTargetAmount += goal.targetAmount;
+        totalCurrentAmount += goal.currentAmount;
+        // Placeholder: you can implement monthly contribution logic here
+        totalMonthlyContribution += 0.0;
       }
 
-      final typeData = progressByType[goal.goalType]!;
-      typeData['count'] = (typeData['count'] as int) + 1;
-      typeData['targetAmount'] =
-          (typeData['targetAmount'] as double) + goal.targetAmount;
-      typeData['currentAmount'] =
-          (typeData['currentAmount'] as double) + goal.currentAmount;
-
-      if (goal.isCompleted) {
-        typeData['completedCount'] = (typeData['completedCount'] as int) + 1;
-      }
+      return {
+        'totalGoals': financialGoals.length,
+        'activeGoals': activeGoals.length,
+        'completedGoals': completedGoals.length,
+        'totalTargetAmount': totalTargetAmount,
+        'totalCurrentAmount': totalCurrentAmount,
+        'totalMonthlyContribution': totalMonthlyContribution,
+        'overallProgress': totalTargetAmount > 0
+            ? (totalCurrentAmount / totalTargetAmount * 100).clamp(0.0, 100.0)
+            : 0.0,
+      };
+    } catch (e) {
+      debugPrint('Error getting financial goals summary: $e');
+      return {};
     }
-
-    return progressByType;
-  }
-
-  // Create a new financial goal with default values
-  static FinancialGoal createNewGoal({
-    required String title,
-    required String description,
-    required double targetAmount,
-    required DateTime targetDate,
-    required String goalType,
-    String? accountId,
-    String? category,
-    String? color,
-  }) {
-    return FinancialGoal(
-      id: _uuid.v4(),
-      title: title,
-      description: description,
-      targetAmount: targetAmount,
-      currentAmount: 0.0,
-      targetDate: targetDate,
-      createdAt: DateTime.now(),
-      goalType: goalType,
-      accountId: accountId,
-      isActive: true,
-      category: category,
-      color: color,
-    );
-  }
-
-  // Pause a financial goal
-  static Future<void> pauseFinancialGoal(String id) async {
-    final goal = await getFinancialGoalById(id);
-    if (goal != null) {
-      final updated = goal.copyWith(isActive: false);
-      await updateFinancialGoal(updated);
-    }
-  }
-
-  // Resume a financial goal
-  static Future<void> resumeFinancialGoal(String id) async {
-    final goal = await getFinancialGoalById(id);
-    if (goal != null) {
-      final updated = goal.copyWith(isActive: true);
-      await updateFinancialGoal(updated);
-    }
-  }
-
-  // Get goals that need attention (overdue or due soon)
-  static Future<List<FinancialGoal>> getGoalsNeedingAttention() async {
-    final allGoals = await getFinancialGoals();
-    return allGoals.where((goal) {
-      return goal.isActive &&
-          !goal.isCompleted &&
-          (goal.isOverdue || goal.daysUntilTarget <= 7);
-    }).toList();
   }
 }

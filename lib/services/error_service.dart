@@ -78,7 +78,7 @@ class ErrorService {
     try {
       final result = await operation();
 
-      if (showSuccessMessage && successMessage != null) {
+      if (showSuccessMessage && successMessage != null && context.mounted) {
         showSuccessSnackBar(context, successMessage);
       }
 
@@ -91,7 +91,9 @@ class ErrorService {
       );
 
       final message = errorMessage ?? 'An error occurred. Please try again.';
-      showErrorSnackBar(context, message);
+      if (context.mounted) {
+        showErrorSnackBar(context, message);
+      }
 
       return null;
     }

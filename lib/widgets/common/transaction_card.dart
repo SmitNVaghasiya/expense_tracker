@@ -11,6 +11,7 @@ class TransactionCard extends StatelessWidget {
   final bool showActions;
   final bool isCompact;
   final Color? customColor;
+  final String currencySymbol; // Added currencySymbol
 
   const TransactionCard({
     super.key,
@@ -22,6 +23,7 @@ class TransactionCard extends StatelessWidget {
     this.showActions = true,
     this.isCompact = false,
     this.customColor,
+    required this.currencySymbol, // Added to constructor
   });
 
   @override
@@ -62,7 +64,7 @@ class TransactionCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: getTransactionColor().withOpacity(0.1),
+                                              color: getTransactionColor().withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -94,7 +96,7 @@ class TransactionCard extends StatelessWidget {
                                 size: 12,
                                 color: Theme.of(
                                   context,
-                                ).colorScheme.onSurface.withOpacity(0.6),
+                                ).colorScheme.onSurface.withValues(alpha: 0.6),
                               ),
                               const SizedBox(width: 4),
                               Text(
@@ -103,7 +105,7 @@ class TransactionCard extends StatelessWidget {
                                   fontSize: 12,
                                   color: Theme.of(
                                     context,
-                                  ).colorScheme.onSurface.withOpacity(0.6),
+                                  ).colorScheme.onSurface.withValues(alpha: 0.6),
                                 ),
                               ),
                             ],
@@ -115,7 +117,7 @@ class TransactionCard extends StatelessWidget {
                               fontSize: 11,
                               color: Theme.of(
                                 context,
-                              ).colorScheme.onSurface.withOpacity(0.5),
+                              ).colorScheme.onSurface.withValues(alpha: 0.5),
                             ),
                           ),
                       ],
@@ -131,7 +133,7 @@ class TransactionCard extends StatelessWidget {
                             ? '-'
                             : isIncome
                             ? '+'
-                            : ''}${NumberFormat.currency(symbol: '₹', decimalDigits: 2).format(transaction.amount)}',
+                            : ''}${NumberFormat.currency(symbol: currencySymbol, decimalDigits: 2).format(transaction.amount)}',
                         style: TextStyle(
                           fontSize: isCompact ? 14 : 16,
                           fontWeight: FontWeight.bold,
@@ -147,7 +149,7 @@ class TransactionCard extends StatelessWidget {
                             fontSize: 11,
                             color: Theme.of(
                               context,
-                            ).colorScheme.onSurface.withOpacity(0.5),
+                            ).colorScheme.onSurface.withValues(alpha: 0.5),
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,

@@ -17,7 +17,7 @@ import 'package:spendwise/models/loan.dart';
 class DatabaseService {
   static Database? _database;
   static const String _dbName = 'spendwise.db';
-  static const int _dbVersion = 6; // Increment version to trigger upgrades
+  static const int _dbVersion = 7; // Increment version to trigger upgrades
 
   // Table names
   static const String _transactionsTable = 'transactions';
@@ -50,8 +50,6 @@ class DatabaseService {
           await getApplicationDocumentsDirectory();
       final String path = join(documentsDirectory.path, _dbName);
 
-      print('Database path: $path'); // Debug log
-
       final Database database = await openDatabase(
         path,
         version: _dbVersion,
@@ -60,7 +58,6 @@ class DatabaseService {
       );
       return database;
     } catch (e, stackTrace) {
-      print('Database initialization error: $e'); // Debug log
       ErrorService.logError(
         'Failed to initialize database: $e',
         context: 'DatabaseService._initDatabase',
@@ -181,15 +178,15 @@ class DatabaseService {
       dueDate TEXT,
       status TEXT NOT NULL,
       notes TEXT,
+      loanCategory TEXT NOT NULL DEFAULT 'personal',
       accountId TEXT,
+      interestRate REAL,
+      termInMonths INTEGER,
       paymentFrequency TEXT,
-      paymentDay INTEGER,
       monthlyPayment REAL,
       paidAmount REAL NOT NULL,
       autoDeduct INTEGER NOT NULL,
       nextPaymentDate TEXT,
-      nextPaymentAmount REAL,
-      paymentHistory TEXT,
       createdAt TEXT NOT NULL
     )
   ''');
@@ -433,6 +430,17 @@ class DatabaseService {
         )
       ''');
     }
+
+    if (oldVersion < 7) {
+      // Add new columns to loans table
+      await db.execute('ALTER TABLE $_loansTable ADD COLUMN loanCategory TEXT NOT NULL DEFAULT \'personal\'');
+      await db.execute('ALTER TABLE $_loansTable ADD COLUMN interestRate REAL');
+      await db.execute('ALTER TABLE $_loansTable ADD COLUMN termInMonths INTEGER');
+      // Remove paymentDay as it's no longer used
+      // Note: SQLite does not support dropping columns directly in older versions.
+      // A common strategy is to rename the table, create a new one, copy data, then drop old.
+      // For simplicity, we'll just leave it as a deprecated column for now.
+    }
   }
 
   // Transaction methods
@@ -538,6 +546,45 @@ class DatabaseService {
   static Future<void> deleteAccount(String id) async {
     final db = await database;
     await db.delete(_accountsTable, where: 'id = ?', whereArgs: [id]);
+  }
+
+  // Direct account balance update for atomic operations
+  static Future<void> updateAccountBalanceDirect({
+    required String accountId,
+    required double amount,
+    required String transactionType,
+    required DatabaseExecutor db,
+  }) async {
+    final String sql = '''
+      UPDATE $_accountsTable
+      SET balance = balance + ?
+      WHERE id = ?
+    ''';
+
+    // Determine the amount to add or subtract
+    final double updateAmount =
+        (transactionType == 'income') ? amount : -amount;
+
+    await db.rawUpdate(sql, [updateAmount, accountId]);
+  }
+
+  // Atomically handle a transfer between two accounts
+  static Future<void> transferAmount({
+    required String fromAccountId,
+    required String toAccountId,
+    required double amount,
+    required DatabaseExecutor db,
+  }) async {
+    // Subtract from the 'from' account
+    await db.rawUpdate(
+      'UPDATE $_accountsTable SET balance = balance - ? WHERE id = ?',
+      [amount, fromAccountId],
+    );
+    // Add to the 'to' account
+    await db.rawUpdate(
+      'UPDATE $_accountsTable SET balance = balance + ? WHERE id = ?',
+      [amount, toAccountId],
+    );
   }
 
   // Category methods
@@ -740,9 +787,11 @@ class DatabaseService {
         dueDate: map['dueDate'] != null ? DateTime.parse(map['dueDate']) : null,
         status: map['status'],
         notes: map['notes'],
+        loanCategory: map['loanCategory'],
         accountId: map['accountId'],
+        interestRate: map['interestRate'],
+        termInMonths: map['termInMonths'],
         paymentFrequency: map['paymentFrequency'],
-        paymentDay: map['paymentDay'],
         monthlyPayment: map['monthlyPayment'],
         paidAmount: map['paidAmount'] ?? 0.0,
         paymentHistory: paymentHistory,
@@ -750,6 +799,7 @@ class DatabaseService {
         nextPaymentDate: map['nextPaymentDate'] != null
             ? DateTime.parse(map['nextPaymentDate'])
             : null,
+        createdAt: DateTime.parse(map['createdAt']),
       );
     });
   }
@@ -807,5 +857,27 @@ class DatabaseService {
     } catch (e) {
       // Ignore errors if file doesn't exist
     }
+  }
+
+  // Clear specific data types
+  static Future<void> clearAllTransactions() async {
+    final db = await database;
+    await db.delete(_transactionsTable);
+  }
+
+  static Future<void> clearAllBudgets() async {
+    final db = await database;
+    await db.delete(_budgetsTable);
+    await db.delete(_overallBudgetsTable);
+  }
+
+  static Future<void> clearAllAccounts() async {
+    final db = await database;
+    await db.delete(_accountsTable);
+  }
+
+  static Future<void> clearAllGroups() async {
+    final db = await database;
+    await db.delete(_groupsTable);
   }
 }

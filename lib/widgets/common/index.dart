@@ -18,10 +18,7 @@ export 'simple_time_input.dart';
 export 'time_input_demo.dart';
 export 'transaction_card.dart';
 
-// Performance optimization components
-export 'optimized_widgets.dart';
-export 'optimized_tab_screen.dart';
-export 'optimized_list_view.dart';
+
 
 // Performance optimization mixins
 export '../../core/performance_mixins.dart';

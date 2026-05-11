@@ -73,7 +73,7 @@ class LoanReminderService {
             ),
           );
 
-          if (account.balance < (loan.nextPaymentAmount ?? 0)) {
+          if (account.balance < loan.nextPaymentAmount) {
             alerts.add({
               'type': 'auto_deduct_failed',
               'loan': loan,
@@ -116,11 +116,11 @@ class LoanReminderService {
           ),
         );
 
-        if (account.balance >= (loan.nextPaymentAmount ?? 0)) {
+        if (account.balance >= loan.nextPaymentAmount) {
           try {
             // Create automatic payment
             final payment = LoanPayment(
-              amount: loan.nextPaymentAmount ?? 0,
+              amount: loan.nextPaymentAmount,
               date: now,
               notes: 'Automatic deduction',
               accountId: loan.accountId,

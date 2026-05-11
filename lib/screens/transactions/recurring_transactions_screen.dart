@@ -14,7 +14,6 @@ class RecurringTransactionsScreen extends StatefulWidget {
 
 class _RecurringTransactionsScreenState
     extends State<RecurringTransactionsScreen> {
-  final RecurringTransactionService _service = RecurringTransactionService();
   List<RecurringTransaction> _recurringTransactions = [];
   bool _isLoading = true;
   String _filterType = 'all'; // all, active, inactive
@@ -315,9 +314,9 @@ class _AddEditRecurringTransactionSheetState
   DateTime _startDate = DateTime.now();
   DateTime? _endDate;
   bool _isActive = true;
-  final String _currency = 'USD';
 
-  final RecurringTransactionService _service = RecurringTransactionService();
+
+
 
   @override
   void initState() {
@@ -489,7 +488,7 @@ class _AddEditRecurringTransactionSheetState
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedType,
+                    initialValue: _selectedType,
                     decoration: const InputDecoration(
                       labelText: 'Type',
                       border: OutlineInputBorder(),
@@ -521,7 +520,7 @@ class _AddEditRecurringTransactionSheetState
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedFrequency,
+                    initialValue: _selectedFrequency,
                     decoration: const InputDecoration(
                       labelText: 'Frequency',
                       border: OutlineInputBorder(),

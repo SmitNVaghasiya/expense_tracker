@@ -27,10 +27,10 @@ class ReportsDateFilter extends StatelessWidget {
             vertical: 12,
           ),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceVariant,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
             ),
           ),
           child: Row(
@@ -38,7 +38,7 @@ class ReportsDateFilter extends StatelessWidget {
               Icon(
                 Icons.date_range,
                 size: 20,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -58,7 +58,7 @@ class ReportsDateFilter extends StatelessWidget {
                         '${DateFormat('MMM dd, yyyy').format(selectedDateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(selectedDateRange!.end)}',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
                         ),
                       ),
                   ],

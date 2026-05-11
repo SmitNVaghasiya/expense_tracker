@@ -93,11 +93,6 @@ class _BaseFinancialScreenState extends State<BaseFinancialScreen>
   Widget _buildFloatingActionButton() {
     return FloatingActionButton(
       onPressed: _onFloatingActionButtonPressed,
-      backgroundColor: widget.primaryColor,
-      foregroundColor: Colors.white,
-      tooltip:
-          widget.floatingActionButtonTooltip ??
-          'Add ${widget.screenTitle.toLowerCase()}',
       child: Icon(widget.screenIcon),
     );
   }
@@ -194,11 +189,6 @@ class _BaseListFinancialScreenState extends State<BaseListFinancialScreen>
       floatingActionButton: widget.showFloatingActionButton
           ? FloatingActionButton(
               onPressed: _onFloatingActionButtonPressed,
-              backgroundColor: widget.primaryColor,
-              foregroundColor: Colors.white,
-              tooltip:
-                  widget.floatingActionButtonTooltip ??
-                  'Add ${widget.screenTitle.toLowerCase()}',
               child: Icon(widget.screenIcon),
             )
           : null,

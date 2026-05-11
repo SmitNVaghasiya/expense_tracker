@@ -40,7 +40,7 @@ class LoadingIndicator extends StatelessWidget {
                 message!,
                 style: TextStyle(
                   fontSize: 14,
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -75,7 +75,7 @@ class LoadingOverlay extends StatelessWidget {
         child,
         if (isLoading)
           Container(
-            color: (backgroundColor ?? Colors.black).withOpacity(opacity),
+            color: (backgroundColor ?? Colors.black).withValues(alpha: opacity),
             child: LoadingIndicator(
               message: loadingMessage,
               showMessage: true,

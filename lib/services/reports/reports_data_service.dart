@@ -419,8 +419,6 @@ class ReportsDataService {
       int categoriesUnderBudget = 0;
       int categoriesOverBudget = 0;
       double totalBudgetLimit = 0;
-      double totalSpent = 0;
-
       for (final budget in monthBudgets) {
         if (budget.limit > 0) {
           categoriesWithBudgets++;
@@ -431,8 +429,6 @@ class ReportsDataService {
                 (t) => t.type == 'expense' && t.category == budget.category,
               )
               .fold(0.0, (sum, t) => sum + t.amount);
-
-          totalSpent += categorySpent;
 
           if (categorySpent <= budget.limit) {
             categoriesUnderBudget++;
@@ -517,8 +513,6 @@ class ReportsDataService {
       int categoriesUnderBudget = 0;
       int categoriesOverBudget = 0;
       double totalBudgetLimit = 0;
-      double totalSpent = 0;
-
       // Group budgets by category and sum limits
       final Map<String, double> categoryBudgets = {};
       for (final budget in yearBudgets) {
@@ -535,8 +529,6 @@ class ReportsDataService {
         final categorySpent = yearTransactions
             .where((t) => t.type == 'expense' && t.category == entry.key)
             .fold(0.0, (sum, t) => sum + t.amount);
-
-        totalSpent += categorySpent;
 
         if (categorySpent <= entry.value) {
           categoriesUnderBudget++;

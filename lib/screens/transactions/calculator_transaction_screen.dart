@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:spendwise/models/transaction.dart';
 import 'package:spendwise/models/account.dart';
+import 'package:spendwise/models/category.dart';
 import 'package:spendwise/services/data_service.dart';
+import 'package:spendwise/services/optimized_app_state.dart';
+import 'package:spendwise/services/category_service.dart';
 import 'package:spendwise/widgets/common/index.dart' as common_widgets;
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
+import 'package:math_expressions/math_expressions.dart';
 
 class CalculatorTransactionScreen extends StatefulWidget {
   final String initialType;
@@ -34,308 +39,17 @@ class _CalculatorTransactionScreenState
   String? _selectedAccountId;
   String? _selectedToAccountId; // For transfer functionality
   List<Account> _accounts = [];
+  List<Category> _expenseCategories = [];
+  List<Category> _incomeCategories = [];
+  List<Category> _transferCategories = [];
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   final TextEditingController _notesController = TextEditingController();
-
-  final List<Map<String, dynamic>> _expenseCategories = [
-    // Food & Dining - Multiple icon options
-    {'name': 'Food & Dining', 'icon': Icons.restaurant, 'color': Colors.red},
-    {
-      'name': 'Restaurant',
-      'icon': Icons.restaurant_menu,
-      'color': Colors.red[600]!,
-    },
-    {'name': 'Fast Food', 'icon': Icons.fastfood, 'color': Colors.red[500]!},
-    {'name': 'Coffee', 'icon': Icons.coffee, 'color': Colors.brown[600]!},
-    {'name': 'Snacks', 'icon': Icons.local_cafe, 'color': Colors.brown},
-    {
-      'name': 'Groceries',
-      'icon': Icons.shopping_cart,
-      'color': Colors.orange[600]!,
-    },
-    {'name': 'Bakery', 'icon': Icons.cake, 'color': Colors.orange[500]!},
-    {'name': 'Eating Out', 'icon': Icons.restaurant, 'color': Colors.red[400]!},
-
-    // Transportation - Multiple icon options
-    {
-      'name': 'Transportation',
-      'icon': Icons.directions_car,
-      'color': Colors.blue,
-    },
-    {'name': 'Car', 'icon': Icons.directions_car, 'color': Colors.blue[600]!},
-    {'name': 'Bus', 'icon': Icons.directions_bus, 'color': Colors.blue[500]!},
-    {
-      'name': 'Bus Ticket',
-      'icon': Icons.directions_bus,
-      'color': Colors.blue[400]!,
-    },
-    {'name': 'Train', 'icon': Icons.train, 'color': Colors.blue[700]!},
-    {'name': 'Metro', 'icon': Icons.subway, 'color': Colors.blue[800]!},
-    {'name': 'Taxi', 'icon': Icons.local_taxi, 'color': Colors.yellow[700]!},
-    {'name': 'Auto riksha', 'icon': Icons.directions_bus, 'color': Colors.blue},
-    {'name': 'Bike', 'icon': Icons.motorcycle, 'color': Colors.purple},
-    {'name': 'Bicycle', 'icon': Icons.pedal_bike, 'color': Colors.green[600]!},
-    {
-      'name': 'Walking',
-      'icon': Icons.directions_walk,
-      'color': Colors.green[500]!,
-    },
-
-    // Shopping & Retail - Multiple icon options
-    {'name': 'Shopping', 'icon': Icons.shopping_bag, 'color': Colors.purple},
-    {'name': 'Clothes', 'icon': Icons.checkroom, 'color': Colors.orange},
-    {'name': 'Clothing', 'icon': Icons.checkroom, 'color': Colors.orange[600]!},
-    {
-      'name': 'Shoes',
-      'icon': Icons.sports_soccer,
-      'color': Colors.orange[500]!,
-    },
-    {'name': 'Accessories', 'icon': Icons.watch, 'color': Colors.orange[400]!},
-    {'name': 'Jewelry', 'icon': Icons.diamond, 'color': Colors.amber[600]!},
-    {'name': 'Cosmetics', 'icon': Icons.face, 'color': Colors.pink[400]!},
-    {'name': 'Books', 'icon': Icons.book, 'color': Colors.indigo[600]!},
-    {'name': 'Electronics', 'icon': Icons.devices, 'color': Colors.teal},
-    {'name': 'Gadgets', 'icon': Icons.phone_iphone, 'color': Colors.teal[600]!},
-    {'name': 'Gaming', 'icon': Icons.games, 'color': Colors.purple[600]!},
-
-    // Entertainment & Leisure - Multiple icon options
-    {'name': 'Entertainment', 'icon': Icons.movie, 'color': Colors.pink},
-    {'name': 'Movies', 'icon': Icons.movie, 'color': Colors.pink[500]!},
-    {
-      'name': 'Theater',
-      'icon': Icons.theater_comedy,
-      'color': Colors.pink[600]!,
-    },
-    {'name': 'Music', 'icon': Icons.music_note, 'color': Colors.purple[400]!},
-    {
-      'name': 'Concerts',
-      'icon': Icons.music_note,
-      'color': Colors.purple[500]!,
-    },
-    {'name': 'Sports', 'icon': Icons.sports_soccer, 'color': Colors.green},
-    {'name': 'Gym', 'icon': Icons.fitness_center, 'color': Colors.green[600]!},
-    {'name': 'Swimming', 'icon': Icons.pool, 'color': Colors.blue[400]!},
-    {'name': 'Hiking', 'icon': Icons.terrain, 'color': Colors.green[700]!},
-    {'name': 'Travel', 'icon': Icons.flight, 'color': Colors.blue[600]!},
-    {
-      'name': 'Vacation',
-      'icon': Icons.beach_access,
-      'color': Colors.blue[500]!,
-    },
-
-    // Health & Wellness - Multiple icon options
-    {
-      'name': 'Healthcare',
-      'icon': Icons.medical_services,
-      'color': Colors.orange,
-    },
-    {
-      'name': 'Medicine',
-      'icon': Icons.medication,
-      'color': Colors.orange[600]!,
-    },
-    {
-      'name': 'Dental',
-      'icon': Icons.medical_services,
-      'color': Colors.orange[500]!,
-    },
-    {'name': 'Vision', 'icon': Icons.visibility, 'color': Colors.orange[400]!},
-    {
-      'name': 'Mental Health',
-      'icon': Icons.psychology,
-      'color': Colors.orange[700]!,
-    },
-    {
-      'name': 'Fitness',
-      'icon': Icons.fitness_center,
-      'color': Colors.green[600]!,
-    },
-    {
-      'name': 'Yoga',
-      'icon': Icons.self_improvement,
-      'color': Colors.green[500]!,
-    },
-    {'name': 'Spa', 'icon': Icons.spa, 'color': Colors.pink[300]!},
-
-    // Education & Learning - Multiple icon options
-    {'name': 'Education', 'icon': Icons.school, 'color': Colors.indigo},
-    {
-      'name': 'University',
-      'icon': Icons.account_balance,
-      'color': Colors.indigo[600]!,
-    },
-    {
-      'name': 'Online Courses',
-      'icon': Icons.computer,
-      'color': Colors.indigo[500]!,
-    },
-    {'name': 'Workshops', 'icon': Icons.work, 'color': Colors.indigo[400]!},
-    {
-      'name': 'Certifications',
-      'icon': Icons.verified,
-      'color': Colors.indigo[700]!,
-    },
-    {'name': 'Tutoring', 'icon': Icons.person, 'color': Colors.indigo[800]!},
-
-    // Home & Utilities - Multiple icon options
-    {'name': 'Housing', 'icon': Icons.home, 'color': Colors.green},
-    {'name': 'Rent', 'icon': Icons.home_work, 'color': Colors.green[600]!},
-    {
-      'name': 'Mortgage',
-      'icon': Icons.account_balance,
-      'color': Colors.green[700]!,
-    },
-    {'name': 'Utilities', 'icon': Icons.electric_bolt, 'color': Colors.amber},
-    {
-      'name': 'Electricity',
-      'icon': Icons.electric_bolt,
-      'color': Colors.amber[600]!,
-    },
-    {'name': 'Water', 'icon': Icons.water_drop, 'color': Colors.blue[400]!},
-    {
-      'name': 'Gas',
-      'icon': Icons.local_fire_department,
-      'color': Colors.orange[400]!,
-    },
-    {'name': 'Internet', 'icon': Icons.wifi, 'color': Colors.blue[500]!},
-    {'name': 'Phone Bill', 'icon': Icons.phone, 'color': Colors.blue[600]!},
-    {'name': 'Maintenance', 'icon': Icons.build, 'color': Colors.grey[600]!},
-    {
-      'name': 'Cleaning',
-      'icon': Icons.cleaning_services,
-      'color': Colors.grey[500]!,
-    },
-    {'name': 'Furniture', 'icon': Icons.chair, 'color': Colors.brown[600]!},
-    {'name': 'Decor', 'icon': Icons.image, 'color': Colors.brown[500]!},
-    {
-      'name': 'Living Expenses',
-      'icon': Icons.home,
-      'color': Colors.green[500]!,
-    },
-
-    // Personal Care - Multiple icon options
-    {'name': 'Hair Cut', 'icon': Icons.content_cut, 'color': Colors.pink},
-    {'name': 'Salon', 'icon': Icons.face, 'color': Colors.pink[400]!},
-    {'name': 'Barber', 'icon': Icons.content_cut, 'color': Colors.pink[500]!},
-    {'name': 'Nail Care', 'icon': Icons.brush, 'color': Colors.pink[300]!},
-    {'name': 'Skincare', 'icon': Icons.face, 'color': Colors.pink[400]!},
-
-    // Business & Professional - Multiple icon options
-    {'name': 'Business', 'icon': Icons.business, 'color': Colors.grey[700]!},
-    {'name': 'Office Supplies', 'icon': Icons.work, 'color': Colors.grey[600]!},
-    {
-      'name': 'Professional Development',
-      'icon': Icons.trending_up,
-      'color': Colors.grey[800]!,
-    },
-    {'name': 'Networking', 'icon': Icons.people, 'color': Colors.grey[500]!},
-    {'name': 'Conferences', 'icon': Icons.event, 'color': Colors.grey[600]!},
-
-    // Financial Services - Multiple icon options
-    {
-      'name': 'Banking',
-      'icon': Icons.account_balance,
-      'color': Colors.green[700]!,
-    },
-    {'name': 'Insurance', 'icon': Icons.security, 'color': Colors.green[600]!},
-    {
-      'name': 'Investment',
-      'icon': Icons.trending_up,
-      'color': Colors.green[500]!,
-    },
-    {'name': 'Taxes', 'icon': Icons.receipt_long, 'color': Colors.red[600]!},
-    {'name': 'Fees', 'icon': Icons.payment, 'color': Colors.red[500]!},
-
-    // Social & Relationships - Multiple icon options
-    {'name': 'Social', 'icon': Icons.people, 'color': Colors.green},
-    {'name': 'Dating', 'icon': Icons.favorite, 'color': Colors.red[400]!},
-    {'name': 'Gifts', 'icon': Icons.card_giftcard, 'color': Colors.pink[400]!},
-    {
-      'name': 'Charity',
-      'icon': Icons.volunteer_activism,
-      'color': Colors.green[500]!,
-    },
-    {
-      'name': 'Donations',
-      'icon': Icons.favorite_border,
-      'color': Colors.green[400]!,
-    },
-
-    // Technology & Digital - Multiple icon options
-    {'name': 'Software', 'icon': Icons.computer, 'color': Colors.blue[600]!},
-    {'name': 'Apps', 'icon': Icons.phone_android, 'color': Colors.blue[500]!},
-    {'name': 'Streaming', 'icon': Icons.play_circle, 'color': Colors.red[500]!},
-    {'name': 'Gaming', 'icon': Icons.games, 'color': Colors.purple[600]!},
-    {
-      'name': 'Digital Services',
-      'icon': Icons.cloud,
-      'color': Colors.blue[400]!,
-    },
-
-    // Pet Care - Multiple icon options
-    {'name': 'Pet Food', 'icon': Icons.pets, 'color': Colors.brown[500]!},
-    {
-      'name': 'Veterinary',
-      'icon': Icons.medical_services,
-      'color': Colors.orange[600]!,
-    },
-    {'name': 'Pet Supplies', 'icon': Icons.pets, 'color': Colors.brown[600]!},
-    {
-      'name': 'Pet Grooming',
-      'icon': Icons.content_cut,
-      'color': Colors.brown[400]!,
-    },
-
-    // Miscellaneous
-    {'name': 'Other', 'icon': Icons.circle, 'color': Colors.blue},
-    {'name': 'Emergency', 'icon': Icons.emergency, 'color': Colors.red[800]!},
-    {'name': 'Legal', 'icon': Icons.gavel, 'color': Colors.grey[800]!},
-    {'name': 'Repairs', 'icon': Icons.handyman, 'color': Colors.grey[600]!},
-    {'name': 'Storage', 'icon': Icons.inventory, 'color': Colors.grey[500]!},
-  ];
-
-  final List<Map<String, dynamic>> _incomeCategories = [
-    {
-      'name': 'Salary',
-      'icon': Icons.account_balance_wallet,
-      'color': Colors.red[700]!,
-    },
-    {'name': 'Freelance', 'icon': Icons.work, 'color': Colors.blue[600]!},
-    {
-      'name': 'Investment',
-      'icon': Icons.trending_up,
-      'color': Colors.green[500]!,
-    },
-    {'name': 'Gift', 'icon': Icons.card_giftcard, 'color': Colors.pink[400]!},
-    {
-      'name': 'Other Income',
-      'icon': Icons.attach_money,
-      'color': Colors.green[600]!,
-    },
-  ];
-
-  final List<Map<String, dynamic>> _transferCategories = [
-    {'name': 'Transfer', 'icon': Icons.swap_horiz, 'color': Colors.blue},
-    {
-      'name': 'Internal Transfer',
-      'icon': Icons.swap_horiz,
-      'color': Colors.blue[600]!,
-    },
-    {
-      'name': 'Account Transfer',
-      'icon': Icons.swap_horiz,
-      'color': Colors.blue[500]!,
-    },
-  ];
 
   @override
   void initState() {
     super.initState();
     _selectedType = widget.initialType;
-    _selectedCategory = _selectedType == 'expense'
-        ? _expenseCategories.first['name']!
-        : _incomeCategories.first['name']!;
     _selectedDate = widget.initialDate ?? DateTime.now();
     _loadAccounts();
 
@@ -351,6 +65,35 @@ class _CalculatorTransactionScreenState
       _selectedToAccountId = transaction.toAccountId;
       _notesController.text = transaction.notes ?? '';
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadCategories();
+  }
+
+  void _loadCategories() {
+    final appState = context.read<OptimizedAppState>();
+    setState(() {
+      _expenseCategories =
+          appState.categories.where((c) => c.type == 'expense').toList();
+      _incomeCategories =
+          appState.categories.where((c) => c.type == 'income').toList();
+      _transferCategories =
+          appState.categories.where((c) => c.type == 'transfer').toList();
+
+      if (widget.editingTransaction == null) {
+        if (_selectedType == 'expense' && _expenseCategories.isNotEmpty) {
+          _selectedCategory = _expenseCategories.first.name;
+        } else if (_selectedType == 'income' && _incomeCategories.isNotEmpty) {
+          _selectedCategory = _incomeCategories.first.name;
+        } else if (_selectedType == 'transfer' &&
+            _transferCategories.isNotEmpty) {
+          _selectedCategory = _transferCategories.first.name;
+        }
+      }
+    });
   }
 
   @override
@@ -518,92 +261,18 @@ class _CalculatorTransactionScreenState
       // Replace display operators with standard operators
       expression = expression.replaceAll('×', '*').replaceAll('÷', '/');
 
-      // Simple expression evaluator using a stack-based approach
-      return _evaluateSimpleExpression(expression);
+      // Parse the expression
+      GrammarParser p = GrammarParser();
+      Expression exp = p.parse(expression);
+
+      // Evaluate the expression
+      RealEvaluator evaluator = RealEvaluator();
+      num eval = evaluator.evaluate(exp);
+
+      return eval.toDouble();
     } catch (e) {
-      throw Exception('Invalid expression');
+      return double.tryParse(_displayAmount) ?? 0.0;
     }
-  }
-
-  double _evaluateSimpleExpression(String expression) {
-    // Remove all spaces
-    expression = expression.replaceAll(' ', '');
-
-    // Handle negative numbers at the beginning
-    if (expression.startsWith('-')) {
-      expression = '0$expression';
-    }
-
-    // Split by operators while preserving them
-    final List<String> tokens = [];
-    String currentNumber = '';
-
-    for (int i = 0; i < expression.length; i++) {
-      final char = expression[i];
-      if (char == '+' || char == '-' || char == '*' || char == '/') {
-        if (currentNumber.isNotEmpty) {
-          tokens.add(currentNumber);
-          currentNumber = '';
-        }
-        tokens.add(char);
-      } else {
-        currentNumber += char;
-      }
-    }
-    if (currentNumber.isNotEmpty) {
-      tokens.add(currentNumber);
-    }
-
-    // Handle negative numbers after operators
-    for (int i = 0; i < tokens.length - 1; i++) {
-      if (tokens[i] == '-' &&
-          (i == 0 ||
-              tokens[i - 1] == '+' ||
-              tokens[i - 1] == '-' ||
-              tokens[i - 1] == '*' ||
-              tokens[i - 1] == '/')) {
-        if (i + 1 < tokens.length) {
-          tokens[i + 1] = '-${tokens[i + 1]}';
-          tokens.removeAt(i);
-        }
-      }
-    }
-
-    // First pass: handle multiplication and division
-    for (int i = 1; i < tokens.length - 1; i += 2) {
-      if (tokens[i] == '*' || tokens[i] == '/') {
-        final left = double.parse(tokens[i - 1]);
-        final right = double.parse(tokens[i + 1]);
-        double result;
-
-        if (tokens[i] == '*') {
-          result = left * right;
-        } else {
-          if (right == 0) throw Exception('Division by zero');
-          result = left / right;
-        }
-
-        tokens[i - 1] = result.toString();
-        tokens.removeAt(i);
-        tokens.removeAt(i);
-        i -= 2;
-      }
-    }
-
-    // Second pass: handle addition and subtraction
-    double result = double.parse(tokens[0]);
-    for (int i = 1; i < tokens.length; i += 2) {
-      if (i + 1 < tokens.length) {
-        final right = double.parse(tokens[i + 1]);
-        if (tokens[i] == '+') {
-          result += right;
-        } else if (tokens[i] == '-') {
-          result -= right;
-        }
-      }
-    }
-
-    return result;
   }
 
   Future<void> _selectDate() async {
@@ -681,32 +350,29 @@ class _CalculatorTransactionScreenState
       toAccountId: _selectedType == 'transfer' ? _selectedToAccountId : null,
     );
 
-    try {
-      if (widget.editingTransaction != null) {
-        await DataService.updateTransaction(transaction);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Transaction updated successfully')),
-          );
-        }
-      } else {
-        await DataService.addTransaction(transaction);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Transaction added successfully')),
-          );
-        }
-      }
+    // ignore: use_build_context_synchronously
+    final appState = Provider.of<OptimizedAppState>(context, listen: false);
+    // ignore: use_build_context_synchronously
+    final messenger = ScaffoldMessenger.of(context);
 
+    if (widget.editingTransaction != null) {
+      await appState.updateTransactionOptimistically(transaction);
       if (mounted) {
-        Navigator.pop(context, true);
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Transaction updated successfully')),
+        );
       }
-    } catch (e) {
+    } else {
+      await appState.addTransactionOptimistically(transaction);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error saving transaction: $e')));
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Transaction added successfully')),
+        );
       }
+    }
+
+    if (mounted) {
+      Navigator.pop(context, true);
     }
   }
 
@@ -894,7 +560,9 @@ class _CalculatorTransactionScreenState
                     onTap: () {
                       setState(() {
                         _selectedType = 'income';
-                        _selectedCategory = _incomeCategories.first['name']!;
+                        if (_incomeCategories.isNotEmpty) {
+                          _selectedCategory = _incomeCategories.first.name;
+                        }
                       });
                     },
                     child: Container(
@@ -924,7 +592,9 @@ class _CalculatorTransactionScreenState
                     onTap: () {
                       setState(() {
                         _selectedType = 'expense';
-                        _selectedCategory = _expenseCategories.first['name']!;
+                        if (_expenseCategories.isNotEmpty) {
+                          _selectedCategory = _expenseCategories.first.name;
+                        }
                       });
                     },
                     child: Container(
@@ -954,7 +624,9 @@ class _CalculatorTransactionScreenState
                     onTap: () {
                       setState(() {
                         _selectedType = 'transfer';
-                        _selectedCategory = _transferCategories.first['name']!;
+                        if (_transferCategories.isNotEmpty) {
+                          _selectedCategory = _transferCategories.first.name;
+                        }
                       });
                     },
                     child: Container(
@@ -1324,22 +996,23 @@ class _CalculatorTransactionScreenState
   }
 
   Color _getCategoryColor(String categoryName) {
-    for (var category in _expenseCategories) {
-      if (category['name'] == categoryName) {
-        return category['color'] as Color;
-      }
-    }
-    for (var category in _incomeCategories) {
-      if (category['name'] == categoryName) {
-        return category['color'] as Color;
-      }
-    }
-    for (var category in _transferCategories) {
-      if (category['name'] == categoryName) {
-        return category['color'] as Color;
-      }
-    }
-    return Colors.grey; // Fallback color
+    final allCategories = [
+      ..._expenseCategories,
+      ..._incomeCategories,
+      ..._transferCategories,
+    ];
+    final category = allCategories.firstWhere(
+      (c) => c.name == categoryName,
+      orElse: () => Category(
+        id: '',
+        name: '',
+        type: '',
+        icon: 'category',
+        color: '#808080',
+        createdAt: DateTime.now(),
+      ),
+    );
+    return CategoryService.getColorFromHex(category.color);
   }
 
   Widget _buildCalculator() {
@@ -1771,8 +1444,8 @@ class _CalculatorTransactionScreenState
     final categories = _selectedType == 'expense'
         ? _expenseCategories
         : _selectedType == 'income'
-        ? _incomeCategories
-        : _transferCategories;
+            ? _incomeCategories
+            : _transferCategories;
 
     showModalBottomSheet(
       context: context,
@@ -1801,25 +1474,28 @@ class _CalculatorTransactionScreenState
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: category['color'].withOpacity(0.1),
+                            color: CategoryService.getColorFromHex(category.color)
+                                .withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Icon(
-                            category['icon'],
-                            color: category['color'],
+                            CategoryService.getIconData(category.icon),
+                            color: CategoryService.getColorFromHex(category.color),
                             size: 20,
                           ),
                         ),
                         title: Text(
-                          category['name'],
+                          category.name,
                           style: const TextStyle(fontWeight: FontWeight.w500),
                         ),
-                        trailing: _selectedCategory == category['name']
-                            ? Icon(Icons.check, color: category['color'])
+                        trailing: _selectedCategory == category.name
+                            ? Icon(Icons.check,
+                                color: CategoryService.getColorFromHex(
+                                    category.color))
                             : null,
                         onTap: () {
                           setState(() {
-                            _selectedCategory = category['name']!;
+                            _selectedCategory = category.name;
                           });
                           Navigator.pop(context);
                         },
@@ -1835,21 +1511,23 @@ class _CalculatorTransactionScreenState
   }
 
   IconData _getCategoryIcon(String categoryName) {
-    for (var category in _expenseCategories) {
-      if (category['name'] == categoryName) {
-        return category['icon'] as IconData;
-      }
-    }
-    for (var category in _incomeCategories) {
-      if (category['name'] == categoryName) {
-        return category['icon'] as IconData;
-      }
-    }
-    for (var category in _transferCategories) {
-      if (category['name'] == categoryName) {
-        return category['icon'] as IconData;
-      }
-    }
-    return Icons.category; // Fallback icon
+    final allCategories = [
+      ..._expenseCategories,
+      ..._incomeCategories,
+      ..._transferCategories
+    ];
+    final category = allCategories.firstWhere(
+      (c) => c.name == categoryName,
+      orElse: () => Category(
+          id: '', // Default value
+          name: '', // Default value
+          type: '', // Default value
+          icon: 'category', // Default value
+          color: '#808080', // Default value
+          createdAt: DateTime.now()),
+    );
+    return CategoryService.getIconData(category.icon);
   }
+
+  // duplicate removed (defined earlier)
 }

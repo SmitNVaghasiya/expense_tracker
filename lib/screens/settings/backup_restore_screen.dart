@@ -471,8 +471,12 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   }
 
   Future<void> _importBackup() async {
+    // Store context before async operations
+    final currentContext = context;
+    final scaffoldMessenger = ScaffoldMessenger.of(currentContext);
+
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
       );
@@ -483,8 +487,10 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         Map<String, dynamic> backupData = jsonDecode(content);
 
         // Show confirmation dialog
+        if (!mounted) return;
         bool? confirm = await showDialog<bool>(
-          context: context,
+          // ignore: use_build_context_synchronously
+          context: currentContext,
           builder: (BuildContext context) {
             return AlertDialog(
               backgroundColor: Theme.of(context).cardColor,
@@ -551,7 +557,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
           }
 
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
+            scaffoldMessenger.showSnackBar(
               SnackBar(
                 content: Text('Successfully imported backup'),
                 backgroundColor: Colors.green,
@@ -577,8 +583,12 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   }
 
   Future<void> _importCSV() async {
+    // Store context before async operations
+    final currentContext = context;
+    final scaffoldMessenger = ScaffoldMessenger.of(currentContext);
+
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv'],
       );
@@ -591,8 +601,10 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         CSVFormat format = _detectCSVFormat(content);
 
         // Show format confirmation dialog
+        if (!mounted) return;
         bool? confirm = await showDialog<bool>(
-          context: context,
+          // ignore: use_build_context_synchronously
+          context: currentContext,
           builder: (BuildContext context) {
             return AlertDialog(
               backgroundColor: Theme.of(context).cardColor,
@@ -685,7 +697,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
           }
 
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
+            scaffoldMessenger.showSnackBar(
               SnackBar(
                 content: Text(
                   'Successfully imported ${transactions.length} transactions',
@@ -713,7 +725,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   }
 
   CSVFormat _detectCSVFormat(String content) {
-    List<List<dynamic>> rows = const CsvToListConverter().convert(content);
+    List<List<dynamic>> rows = Csv().decoder.convert(content);
     if (rows.isEmpty) throw Exception('Empty CSV file');
 
     List<String> headers = rows[0]
@@ -774,7 +786,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   }
 
   Future<List<Transaction>> _parseCSV(String content, CSVFormat format) async {
-    List<List<dynamic>> rows = const CsvToListConverter().convert(content);
+    List<List<dynamic>> rows = Csv().decoder.convert(content);
     if (rows.isEmpty) return [];
 
     List<Transaction> transactions = [];

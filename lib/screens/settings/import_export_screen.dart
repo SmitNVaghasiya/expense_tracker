@@ -134,29 +134,27 @@ class _ImportExportScreenState extends State<ImportExportScreen> {
     });
 
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv'],
       );
 
       if (result != null) {
         File file = File(result.files.single.path!);
-        List<Transaction> transactions = await CSVImportService.importFromCSV(
-          file,
-        );
+        final importResult = await CSVImportService.importFromCSV(file);
 
-        // Save imported transactions
-        for (Transaction transaction in transactions) {
+        for (final transaction in importResult.transactions) {
           await DataService.addTransaction(transaction);
         }
 
         if (mounted) {
+          final msg = importResult.hasErrors
+              ? 'Imported ${importResult.successCount} transactions. ${importResult.errors.length} rows skipped.'
+              : 'Successfully imported ${importResult.successCount} transactions';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                'Successfully imported ${transactions.length} transactions',
-              ),
-              backgroundColor: Colors.green,
+              content: Text(msg),
+              backgroundColor: importResult.hasErrors ? Colors.orange : Colors.green,
             ),
           );
         }

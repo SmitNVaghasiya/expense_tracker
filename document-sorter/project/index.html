@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Document Sorter — Android</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: #14110F; }
+  *, *::before, *::after { box-sizing: border-box; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  ::-webkit-scrollbar { display: none; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="app/design-canvas.jsx"></script>
+<script type="text/babel" src="app/tweaks-panel.jsx"></script>
+<script type="text/babel" src="app/icons.jsx"></script>
+<script type="text/babel" src="app/primitives.jsx"></script>
+<script type="text/babel" src="app/screens-1.jsx"></script>
+<script type="text/babel" src="app/screens-2.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useRef } = React;
+
+const ACCENT_OPTIONS = {
+  Sage:    'oklch(64% 0.11 155)',
+  Plum:    'oklch(58% 0.15 320)',
+  Indigo:  'oklch(58% 0.15 265)',
+  Amber:   'oklch(70% 0.14 70)',
+  Ink:     '#14110F',
+};
+
+function App() {
+  const [t, setTweak] = useTweaks(/*EDITMODE-BEGIN*/{
+    "accent": "oklch(64% 0.11 155)",
+    "demoMode": true,
+    "speed": 1
+  }/*EDITMODE-END*/);
+  const accent = t.accent || ACCENT_OPTIONS.Sage;
+
+  // ── Live demo timer
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!t.demoMode) return;
+    const id = setInterval(() => setTick(x => x + 1), 80 / Math.max(0.25, t.speed));
+    return () => clearInterval(id);
+  }, [t.demoMode, t.speed]);
+
+  // 0-100 cycle, staggered: scan first, hash second, transfer third
+  const cycle = (tick % 200) / 200; // 0..1
+  const scanProgress     = t.demoMode ? Math.min(100, Math.round(cycle * 280)) : 100;
+  const hashProgress     = t.demoMode ? Math.min(100, Math.max(0, Math.round((cycle - 0.35) * 240))) : 100;
+  const transferProgress = t.demoMode ? Math.min(100, Math.max(0, Math.round((cycle - 0.55) * 240))) : 41;
+
+  const W = 390, H = 800;
+
+  return (
+    <DesignCanvas>
+      <DCSection id="onboarding" title="Onboarding" subtitle="Pair laptop · grant storage">
+        <DCArtboard id="connect"    label="01 · Connect to laptop" width={W} height={H}>
+          <PhoneShell><ScreenConnect accent={accent}/></PhoneShell>
+        </DCArtboard>
+        <DCArtboard id="permission" label="02 · Storage permission"  width={W} height={H}>
+          <PhoneShell><ScreenPermission accent={accent}/></PhoneShell>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="main" title="Main app" subtitle="Home, scan, files">
+        <DCArtboard id="home"  label="03 · Home dashboard"  width={W} height={H}>
+          <PhoneShell><ScreenHome accent={accent} demo={t.demoMode}/></PhoneShell>
+        </DCArtboard>
+        <DCArtboard id="scan"  label="04 · Scanning storage"  width={W} height={H}>
+          <PhoneShell><ScreenScan accent={accent} demo={t.demoMode} scanProgress={scanProgress} hashProgress={hashProgress}/></PhoneShell>
+        </DCArtboard>
+        <DCArtboard id="files" label="05 · Browse files"     width={W} height={H}>
+          <PhoneShell><ScreenFiles accent={accent}/></PhoneShell>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="transfer" title="Transfer & review" subtitle="Phase 1B + Stage 5-7">
+        <DCArtboard id="xfer"     label="06 · Transfer progress" width={W} height={H}>
+          <PhoneShell><ScreenTransfer accent={accent} transferProgress={transferProgress}/></PhoneShell>
+        </DCArtboard>
+        <DCArtboard id="clusters" label="07 · Cluster review"     width={W} height={H}>
+          <PhoneShell><ScreenClusters accent={accent}/></PhoneShell>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="backend" title="Backend console" subtitle="Desktop web app served from FastAPI">
+        <DCArtboard id="webapp" label="Open web console →" width={1200} height={780}>
+          <a href="web-console.html" style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            width: '100%', height: '100%', textDecoration: 'none', color: '#14110F',
+            background: 'linear-gradient(135deg, #FBF9F5 0%, #EFEBE3 100%)',
+            border: '1px solid #EBE6DE', borderRadius: 18, gap: 16, fontFamily: 'inherit',
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, color: '#7A736B', textTransform: 'uppercase' }}>
+              localhost:8000 / console
+            </div>
+            <div style={{ fontSize: 36, fontWeight: 700, letterSpacing: -0.8 }}>Web console →</div>
+            <div style={{ fontSize: 14, color: '#7A736B', maxWidth: 480, textAlign: 'center' }}>
+              Dashboard, pipeline monitor, duplicates review, cluster labelling, files table, settings
+            </div>
+          </a>
+        </DCArtboard>
+      </DCSection>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Theme">
+          <TweakColor label="Accent" value={t.accent}
+            options={Object.values(ACCENT_OPTIONS)}
+            onChange={(v) => setTweak('accent', v)}/>
+        </TweakSection>
+        <TweakSection label="Demo">
+          <TweakToggle label="Animate progress" value={t.demoMode}
+            onChange={(v) => setTweak('demoMode', v)}/>
+          <TweakSlider label="Speed" value={t.speed} min={0.25} max={2.5} step={0.25}
+            onChange={(v) => setTweak('speed', v)}/>
+        </TweakSection>
+      </TweaksPanel>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

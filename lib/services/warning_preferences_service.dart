@@ -80,7 +80,6 @@ class WarningPreferencesService {
       }
     } catch (e) {
       // If parsing fails, return empty map
-      print('Error parsing hidden warnings: $e');
     }
     return <String, dynamic>{};
   }

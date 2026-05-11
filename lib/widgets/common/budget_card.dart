@@ -67,7 +67,7 @@ class BudgetCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: getProgressColor().withOpacity(0.1),
+                                              color: getProgressColor().withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -97,7 +97,7 @@ class BudgetCard extends StatelessWidget {
                             fontSize: 12,
                             color: Theme.of(
                               context,
-                            ).colorScheme.onSurface.withOpacity(0.7),
+                            ).colorScheme.onSurface.withValues(alpha: 0.7),
                           ),
                         ),
                         if (!isCompact)
@@ -105,9 +105,9 @@ class BudgetCard extends StatelessWidget {
                             '${DateFormat('MMM dd').format(budget.startDate)} - ${DateFormat('MMM dd').format(budget.endDate)}',
                             style: TextStyle(
                               fontSize: 11,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withOpacity(0.5),
+                                                          color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.5),
                             ),
                           ),
                       ],
@@ -136,7 +136,7 @@ class BudgetCard extends StatelessWidget {
                             fontSize: 12,
                             color: Theme.of(
                               context,
-                            ).colorScheme.onSurface.withOpacity(0.7),
+                            ).colorScheme.onSurface.withValues(alpha: 0.7),
                           ),
                         ),
                     ],
@@ -159,7 +159,7 @@ class BudgetCard extends StatelessWidget {
                             fontSize: 12,
                             color: Theme.of(
                               context,
-                            ).colorScheme.onSurface.withOpacity(0.7),
+                            ).colorScheme.onSurface.withValues(alpha: 0.7),
                           ),
                         ),
                         Text(
@@ -177,7 +177,7 @@ class BudgetCard extends StatelessWidget {
                       value: progressPercentage,
                       backgroundColor: Theme.of(
                         context,
-                      ).colorScheme.surfaceVariant,
+                      ).colorScheme.surfaceContainerHighest,
                       valueColor: AlwaysStoppedAnimation<Color>(
                         getProgressColor(),
                       ),

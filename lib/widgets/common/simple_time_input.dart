@@ -185,7 +185,7 @@ class _SimpleTimeInputState extends State<SimpleTimeInput> {
                 'Time Format',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
                 ),
               ),
             ),
@@ -299,7 +299,7 @@ class _SimpleTimeInputState extends State<SimpleTimeInput> {
                     Icons.access_time,
                     color: _hasError 
                         ? Colors.red 
-                        : Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
                   ),
                 ),
                 onChanged: _onTimeChanged,
@@ -397,7 +397,7 @@ class _SimpleTimeInputState extends State<SimpleTimeInput> {
                     : 'Hours: 01-12 | Minutes: 00-59',
                 style: TextStyle(
                   fontSize: 10,
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
             ),

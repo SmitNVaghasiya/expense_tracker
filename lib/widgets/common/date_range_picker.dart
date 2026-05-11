@@ -99,11 +99,11 @@ class DateRangePicker extends StatelessWidget {
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -139,7 +139,7 @@ class DateRangePicker extends StatelessWidget {
               Icon(
                 Icons.calendar_today,
                 size: 18,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -153,7 +153,7 @@ class DateRangePicker extends StatelessWidget {
                         ? Theme.of(context).colorScheme.onSurface
                         : Theme.of(
                             context,
-                          ).colorScheme.onSurface.withOpacity(0.6),
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
                     fontWeight: value != null
                         ? FontWeight.w500
                         : FontWeight.normal,
@@ -162,7 +162,7 @@ class DateRangePicker extends StatelessWidget {
               ),
               Icon(
                 Icons.arrow_drop_down,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ],
           ),

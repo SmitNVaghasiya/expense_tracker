@@ -504,7 +504,7 @@ class _AddEditBillReminderSheetState extends State<_AddEditBillReminderSheet> {
             if (_isRecurring) ...[
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _recurringFrequency,
+                initialValue: _recurringFrequency,
                 decoration: const InputDecoration(
                   labelText: 'Frequency',
                   border: OutlineInputBorder(),

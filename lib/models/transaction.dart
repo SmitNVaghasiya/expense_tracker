@@ -1,3 +1,32 @@
+enum TransactionType { all, expense, income, transfer }
+
+extension TransactionTypeX on TransactionType {
+  String get value {
+    switch (this) {
+      case TransactionType.all:
+        return 'all';
+      case TransactionType.expense:
+        return 'expense';
+      case TransactionType.income:
+        return 'income';
+      case TransactionType.transfer:
+        return 'transfer';
+    }
+  }
+
+  static TransactionType fromString(String raw) {
+    switch (raw) {
+      case 'income':
+        return TransactionType.income;
+      case 'transfer':
+        return TransactionType.transfer;
+      case 'expense':
+      default:
+        return TransactionType.expense;
+    }
+  }
+}
+
 class Transaction {
   final String id;
   final String title;

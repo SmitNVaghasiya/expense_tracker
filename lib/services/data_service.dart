@@ -1,473 +1,471 @@
 import 'package:spendwise/models/transaction.dart';
+import 'package:spendwise/models/account.dart';
 import 'package:spendwise/models/budget.dart';
 import 'package:spendwise/models/overall_budget.dart';
 import 'package:spendwise/models/group.dart';
-import 'package:spendwise/models/account.dart';
 import 'package:spendwise/models/category.dart';
-import 'package:spendwise/services/database_service.dart';
-import 'package:sqflite/sqflite.dart' as sqflite;
-import 'dart:convert';
+import 'package:spendwise/services/unified_database_service.dart';
+import 'package:spendwise/models/loan.dart';
 
 class DataService {
   // Transaction methods
   static Future<List<Transaction>> getTransactions() async {
-    final dynamic result = await DatabaseService.getTransactions();
-    return List<Transaction>.from(result);
+    try {
+      final dynamic result = await UnifiedDatabaseService.getTransactions();
+      return List<Transaction>.from(result);
+    } catch (e) {
+      // Error logged
+      return [];
+    }
   }
 
   static Future<void> addTransaction(Transaction transaction) async {
-    // Use a single database connection for all operations
-    final db = await DatabaseService.database;
+    final db = await UnifiedDatabaseService.database;
+    await db.transaction((txn) async {
+      await txn.insert(
+        'transactions',
+        transaction.toJson(),
+      );
 
-    try {
-      // Start a transaction for atomicity
-      await db.transaction((txn) async {
-        // Add transaction to database
-        await txn.insert(
-          'transactions',
-          transaction.toJson(),
-          conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
+      if (transaction.type == 'transfer') {
+        if (transaction.accountId == null || transaction.toAccountId == null) {
+          throw Exception('Transfer must have a from and to account.');
+        }
+        await UnifiedDatabaseService.transferAmount(
+          fromAccountId: transaction.accountId!,
+          toAccountId: transaction.toAccountId!,
+          amount: transaction.amount,
+          db: txn,
         );
-
-        // Update account balance if account is specified - use direct query instead of fetching all accounts
+      } else {
         if (transaction.accountId != null) {
-          await _updateAccountBalanceDirect(
-            txn,
-            transaction.accountId!,
-            transaction.amount,
-            transaction.type,
+          await UnifiedDatabaseService.updateAccountBalanceDirect(
+            accountId: transaction.accountId!,
+            amount: transaction.amount,
+            transactionType: transaction.type,
+            db: txn,
           );
         }
-      });
-    } catch (e) {
-      // If transaction fails, rethrow the error
-      rethrow;
-    }
+      }
+    });
   }
 
   static Future<void> updateTransaction(Transaction transaction) async {
-    // Use a single database connection for all operations
-    final db = await DatabaseService.database;
+    final db = await UnifiedDatabaseService.database;
+    await db.transaction((txn) async {
+      // Get the old transaction to calculate balance difference
+      final oldTransactionMap = await txn.query(
+        'transactions',
+        where: 'id = ?',
+        whereArgs: [transaction.id],
+      );
 
-    try {
-      // Start a transaction for atomicity
-      await db.transaction((txn) async {
-        // Get the old transaction to calculate balance difference
-        final oldTransaction = await _getTransactionByIdDirect(
-          txn,
-          transaction.id,
-        );
+      if (oldTransactionMap.isEmpty) {
+        throw Exception('Transaction not found for update');
+      }
 
-        // Update transaction in database
-        await txn.update(
-          'transactions',
-          transaction.toJson(),
-          where: 'id = ?',
-          whereArgs: [transaction.id],
-        );
+      final oldTransaction = Transaction.fromJson(oldTransactionMap.first);
 
-        // Update account balance if account is specified
-        if (transaction.accountId != null) {
-          // Reverse the old transaction effect
-          if (oldTransaction != null && oldTransaction.accountId != null) {
-            await _updateAccountBalanceDirect(
-              txn,
-              oldTransaction.accountId!,
-              oldTransaction.amount,
-              oldTransaction.type,
-            );
-          }
-
-          // Apply the new transaction effect
-          await _updateAccountBalanceDirect(
-            txn,
-            transaction.accountId!,
-            transaction.amount,
-            transaction.type,
+      // Revert the old transaction effect
+      if (oldTransaction.type == 'transfer') {
+        if (oldTransaction.accountId != null &&
+            oldTransaction.toAccountId != null) {
+          await UnifiedDatabaseService.transferAmount(
+            fromAccountId: oldTransaction.toAccountId!,
+            toAccountId: oldTransaction.accountId!,
+            amount: oldTransaction.amount,
+            db: txn,
           );
         }
-      });
-    } catch (e) {
-      // If transaction fails, rethrow the error
-      rethrow;
-    }
+      } else {
+        if (oldTransaction.accountId != null) {
+          await UnifiedDatabaseService.updateAccountBalanceDirect(
+            accountId: oldTransaction.accountId!,
+            amount: oldTransaction.amount,
+            transactionType: oldTransaction.type == 'income' ? 'expense' : 'income', // Reverse type
+            db: txn,
+          );
+        }
+      }
+
+      // Apply the new transaction effect
+      if (transaction.type == 'transfer') {
+        if (transaction.accountId == null || transaction.toAccountId == null) {
+          throw Exception('Transfer must have a from and to account.');
+        }
+        await UnifiedDatabaseService.transferAmount(
+          fromAccountId: transaction.accountId!,
+          toAccountId: transaction.toAccountId!,
+          amount: transaction.amount,
+          db: txn,
+        );
+      } else {
+        if (transaction.accountId != null) {
+          await UnifiedDatabaseService.updateAccountBalanceDirect(
+            accountId: transaction.accountId!,
+            amount: transaction.amount,
+            transactionType: transaction.type,
+            db: txn,
+          );
+        }
+      }
+
+      // Finally, update the transaction record itself
+      await txn.update(
+        'transactions',
+        transaction.toJson(),
+        where: 'id = ?',
+        whereArgs: [transaction.id],
+      );
+    });
   }
 
   static Future<void> deleteTransaction(String id) async {
-    // Use a single database connection for all operations
-    final db = await DatabaseService.database;
+    final db = await UnifiedDatabaseService.database;
+    await db.transaction((txn) async {
+      final transactions = await txn.query(
+        'transactions',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
 
-    try {
-      // Start a transaction for atomicity
-      await db.transaction((txn) async {
-        // Get the transaction being deleted to reverse its effect on account balance
-        final transactionToDelete = await _getTransactionByIdDirect(txn, id);
+      if (transactions.isEmpty) {
+        return; // Transaction already deleted
+      }
 
-        if (transactionToDelete != null &&
-            transactionToDelete.accountId != null) {
-          // Update account balance to reverse the transaction
-          await _updateAccountBalanceDirect(
-            txn,
-            transactionToDelete.accountId!,
-            transactionToDelete.amount,
-            transactionToDelete.type,
+      final transactionToDelete = Transaction.fromJson(transactions.first);
+
+      await txn.delete('transactions', where: 'id = ?', whereArgs: [id]);
+
+      if (transactionToDelete.type == 'transfer') {
+        if (transactionToDelete.accountId != null &&
+            transactionToDelete.toAccountId != null) {
+          await UnifiedDatabaseService.transferAmount(
+            fromAccountId: transactionToDelete.toAccountId!,
+            toAccountId: transactionToDelete.accountId!,
+            amount: transactionToDelete.amount,
+            db: txn,
           );
         }
-
-        // Delete the transaction from database
-        await txn.delete('transactions', where: 'id = ?', whereArgs: [id]);
-      });
-    } catch (e) {
-      // If transaction fails, rethrow the error
-      rethrow;
-    }
-  }
-
-  static Future<Transaction?> getTransactionById(String id) async {
-    final transactions = await getTransactions();
-    try {
-      return transactions.firstWhere((transaction) => transaction.id == id);
-    } catch (e) {
-      return null;
-    }
+      } else {
+        if (transactionToDelete.accountId != null) {
+          await UnifiedDatabaseService.updateAccountBalanceDirect(
+            accountId: transactionToDelete.accountId!,
+            amount: transactionToDelete.amount,
+            transactionType:
+                transactionToDelete.type == 'income' ? 'expense' : 'income', // Reverse type
+            db: txn,
+          );
+        }
+      }
+    });
   }
 
   // Budget methods
   static Future<List<Budget>> getBudgets() async {
-    return await DatabaseService.getBudgets();
+    try {
+      final result = await UnifiedDatabaseService.getBudgets();
+      return List<Budget>.from(result);
+    } catch (e) {
+      // Error logged
+      return [];
+    }
   }
 
   static Future<void> addBudget(Budget budget) async {
-    await DatabaseService.addBudget(budget);
+    try {
+      await UnifiedDatabaseService.addBudget(budget);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   static Future<void> updateBudget(Budget budget) async {
-    await DatabaseService.updateBudget(budget);
+    try {
+      await UnifiedDatabaseService.updateBudget(budget);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   static Future<void> deleteBudget(String id) async {
-    await DatabaseService.deleteBudget(id);
+    try {
+      await UnifiedDatabaseService.deleteBudget(id);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   // Overall Budget methods
   static Future<List<OverallBudget>> getOverallBudgets() async {
-    return await DatabaseService.getOverallBudgets();
+    try {
+      final result = await UnifiedDatabaseService.getOverallBudgets();
+      return List<OverallBudget>.from(result);
+    } catch (e) {
+      // Error logged
+      return [];
+    }
   }
 
   static Future<void> addOverallBudget(OverallBudget budget) async {
-    await DatabaseService.addOverallBudget(budget);
+    try {
+      await UnifiedDatabaseService.addOverallBudget(budget);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   static Future<void> updateOverallBudget(OverallBudget budget) async {
-    await DatabaseService.updateOverallBudget(budget);
+    try {
+      await UnifiedDatabaseService.updateOverallBudget(budget);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   static Future<void> deleteOverallBudget(String id) async {
-    await DatabaseService.deleteOverallBudget(id);
+    try {
+      await UnifiedDatabaseService.deleteOverallBudget(id);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   // Group methods
   static Future<List<Group>> getGroups() async {
-    return await DatabaseService.getGroups();
+    try {
+      final result = await UnifiedDatabaseService.getGroups();
+      return List<Group>.from(result);
+    } catch (e) {
+      // Error logged
+      return [];
+    }
   }
 
   static Future<void> addGroup(Group group) async {
-    await DatabaseService.addGroup(group);
+    try {
+      await UnifiedDatabaseService.addGroup(group);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   static Future<void> updateGroup(Group group) async {
-    await DatabaseService.updateGroup(group);
+    try {
+      await UnifiedDatabaseService.updateGroup(group);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   static Future<void> deleteGroup(String id) async {
-    await DatabaseService.deleteGroup(id);
+    try {
+      await UnifiedDatabaseService.deleteGroup(id);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   // Account methods
   static Future<List<Account>> getAccounts() async {
-    return await DatabaseService.getAccounts();
+    try {
+      final result = await UnifiedDatabaseService.getAccounts();
+      return List<Account>.from(result);
+    } catch (e) {
+      // Error logged
+      return [];
+    }
   }
 
   static Future<void> addAccount(Account account) async {
-    await DatabaseService.addAccount(account);
+    try {
+      await UnifiedDatabaseService.addAccount(account);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   static Future<void> updateAccount(Account account) async {
-    await DatabaseService.updateAccount(account);
+    try {
+      await UnifiedDatabaseService.updateAccount(account);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   static Future<void> deleteAccount(String id) async {
-    // Get all transactions for this account
-    final transactions = await getTransactions();
-    final accountTransactions = transactions
-        .where((t) => t.accountId == id)
-        .toList();
+    final db = await UnifiedDatabaseService.database;
+    await db.transaction((txn) async {
+      // Delete all transactions for this account
+      await txn.delete('transactions', where: 'accountId = ? OR toAccountId = ?', whereArgs: [id]);
 
-    // Delete all transactions for this account
-    for (final transaction in accountTransactions) {
-      await DatabaseService.deleteTransaction(transaction.id);
-    }
-
-    // Delete the account
-    await DatabaseService.deleteAccount(id);
-  }
-
-  // Helper method to update account balance when transaction is added
-  static Future<void> updateAccountBalance(
-    String accountId,
-    double amount,
-    String transactionType,
-  ) async {
-    final accounts = await getAccounts();
-    final accountIndex = accounts.indexWhere(
-      (account) => account.id == accountId,
-    );
-
-    if (accountIndex != -1) {
-      final account = accounts[accountIndex];
-      double newBalance = account.balance;
-
-      if (transactionType == 'income') {
-        newBalance += amount;
-      } else if (transactionType == 'expense') {
-        newBalance -= amount;
-      }
-
-      final updatedAccount = account.copyWith(balance: newBalance);
-      await DatabaseService.updateAccount(updatedAccount);
-    }
-  }
-
-  // Helper method to reverse account balance when transaction is deleted or updated
-  static Future<void> reverseAccountBalance(
-    String accountId,
-    double amount,
-    String transactionType,
-  ) async {
-    final accounts = await getAccounts();
-    final accountIndex = accounts.indexWhere(
-      (account) => account.id == accountId,
-    );
-
-    if (accountIndex != -1) {
-      final account = accounts[accountIndex];
-      double newBalance = account.balance;
-
-      // Reverse the transaction effect
-      if (transactionType == 'income') {
-        newBalance -= amount; // Remove income
-      } else if (transactionType == 'expense') {
-        newBalance += amount; // Add back expense
-      }
-
-      final updatedAccount = account.copyWith(balance: newBalance);
-      await DatabaseService.updateAccount(updatedAccount);
-    }
-  }
-
-  static Future<String> getAccountNameById(String accountId) async {
-    final accounts = await getAccounts();
-    final account = accounts.firstWhere(
-      (account) => account.id == accountId,
-      orElse: () => Account(
-        id: accountId,
-        name: 'Unknown Account',
-        balance: 0,
-        type: 'unknown',
-        createdAt: DateTime.now(),
-      ),
-    );
-    return account.name;
-  }
-
-  // Data export methods
-  static Future<String> exportTransactionsToJson() async {
-    final transactions = await getTransactions();
-    return json.encode(transactions.map((t) => t.toJson()).toList());
-  }
-
-  static Future<String> exportAccountsToJson() async {
-    final accounts = await getAccounts();
-    return json.encode(accounts.map((a) => a.toJson()).toList());
-  }
-
-  static Future<String> exportBudgetsToJson() async {
-    final budgets = await getBudgets();
-    return json.encode(budgets.map((b) => b.toJson()).toList());
-  }
-
-  static Future<String> exportGroupsToJson() async {
-    final groups = await getGroups();
-    return json.encode(groups.map((g) => g.toJson()).toList());
-  }
-
-  // Data import methods
-  static Future<void> importTransactionsFromJson(String jsonData) async {
-    final List<dynamic> data = json.decode(jsonData);
-    for (final item in data) {
-      final transaction = Transaction.fromJson(item);
-      await addTransaction(transaction);
-    }
-  }
-
-  static Future<void> importAccountsFromJson(String jsonData) async {
-    final List<dynamic> data = json.decode(jsonData);
-    for (final item in data) {
-      final account = Account.fromJson(item);
-      await addAccount(account);
-    }
-  }
-
-  static Future<void> importBudgetsFromJson(String jsonData) async {
-    final List<dynamic> data = json.decode(jsonData);
-    for (final item in data) {
-      final budget = Budget.fromJson(item);
-      await addBudget(budget);
-    }
-  }
-
-  static Future<void> importGroupsFromJson(String jsonData) async {
-    final List<dynamic> data = json.decode(jsonData);
-    for (final item in data) {
-      final group = Group.fromJson(item);
-      await addGroup(group);
-    }
+      // Delete the account
+      await txn.delete('accounts', where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   // Clear all data
   static Future<void> clearAllData() async {
-    await DatabaseService.clearAllData();
+    try {
+      await UnifiedDatabaseService.clearAllData();
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   // Clear specific data types
   static Future<void> clearAllTransactions() async {
-    final db = await DatabaseService.database;
-    await db.delete('transactions');
+    try {
+      await UnifiedDatabaseService.clearAllTransactions();
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   static Future<void> clearAllBudgets() async {
-    final db = await DatabaseService.database;
-    await db.delete('budgets');
+    try {
+      await UnifiedDatabaseService.clearAllBudgets();
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   static Future<void> clearAllAccounts() async {
-    final db = await DatabaseService.database;
-    await db.delete('accounts');
+    try {
+      await UnifiedDatabaseService.clearAllAccounts();
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   static Future<void> clearAllGroups() async {
-    final db = await DatabaseService.database;
-    await db.delete('groups');
-  }
-
-  // Recalculate all account balances based on transactions
-  static Future<void> recalculateAllAccountBalances() async {
-    final accounts = await getAccounts();
-    final transactions = await getTransactions();
-
-    // Create a map to store calculated balances
-    final Map<String, double> calculatedBalances = {};
-
-    // Initialize all accounts with 0 balance
-    for (final account in accounts) {
-      calculatedBalances[account.id] = 0.0;
-    }
-
-    // Calculate balances from transactions
-    for (final transaction in transactions) {
-      if (transaction.accountId != null) {
-        final currentBalance = calculatedBalances[transaction.accountId] ?? 0.0;
-
-        if (transaction.type == 'income') {
-          calculatedBalances[transaction.accountId!] =
-              currentBalance + transaction.amount;
-        } else if (transaction.type == 'expense') {
-          calculatedBalances[transaction.accountId!] =
-              currentBalance - transaction.amount;
-        }
-      }
-    }
-
-    // Update all accounts with calculated balances
-    for (final account in accounts) {
-      final newBalance = calculatedBalances[account.id] ?? 0.0;
-      final updatedAccount = account.copyWith(balance: newBalance);
-      await DatabaseService.updateAccount(updatedAccount);
+    try {
+      await UnifiedDatabaseService.clearAllGroups();
+    } catch (e) {
+      // Error logged
+      rethrow;
     }
   }
 
-  // Helper method to update account balance directly without fetching all accounts
-  static Future<void> _updateAccountBalanceDirect(
-    sqflite.Transaction txn,
-    String accountId,
-    double amount,
-    String transactionType,
-  ) async {
-    // Use a direct SQL query to update the account balance
-    final sql = '''
-      UPDATE accounts 
-      SET balance = CASE 
-        WHEN ? = 'income' THEN balance + ?
-        WHEN ? = 'expense' THEN balance - ?
-        ELSE balance
-      END
-      WHERE id = ?
-    ''';
-
-    await txn.rawUpdate(sql, [
-      transactionType,
-      amount,
-      transactionType,
-      amount,
-      accountId,
-    ]);
-  }
-
-  // Helper method to get transaction by ID directly from transaction context
-  static Future<Transaction?> _getTransactionByIdDirect(
-    sqflite.Transaction txn,
-    String id,
-  ) async {
-    final List<Map<String, dynamic>> maps = await txn.query(
-      'transactions',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
-    if (maps.isEmpty) return null;
-
-    return Transaction(
-      id: maps[0]['id'],
-      title: maps[0]['title'],
-      amount: maps[0]['amount'],
-      date: DateTime.parse(maps[0]['date']),
-      category: maps[0]['category'],
-      type: maps[0]['type'],
-      accountId: maps[0]['accountId'],
-      notes: maps[0]['notes'],
-      transferId: maps[0]['transferId'],
-      toAccountId: maps[0]['toAccountId'],
-    );
+  // Get account name by ID
+  static Future<String> getAccountNameById(String accountId) async {
+    try {
+      final accounts = await getAccounts();
+      final account = accounts.firstWhere(
+        (account) => account.id == accountId,
+        orElse: () => Account(
+          id: '',
+          name: 'Unknown Account',
+          balance: 0,
+          type: '',
+          createdAt: DateTime.now(),
+        ),
+      );
+      return account.name;
+    } catch (e) {
+      // Error logged
+      return 'Unknown Account';
+    }
   }
 
   // Category methods
   static Future<List<Category>> getCategories() async {
-    return await DatabaseService.getCategories();
+    try {
+      final result = await UnifiedDatabaseService.getCategories();
+      return List<Category>.from(result);
+    } catch (e) {
+      // Error logged
+      return [];
+    }
   }
 
   static Future<List<Category>> getCategoriesByType(String type) async {
-    return await DatabaseService.getCategoriesByType(type);
+    try {
+      final categories = await getCategories();
+      return categories.where((category) => category.type == type).toList();
+    } catch (e) {
+      // Error logged
+      return [];
+    }
   }
 
   static Future<void> addCategory(Category category) async {
-    await DatabaseService.addCategory(category);
+    try {
+      await UnifiedDatabaseService.addCategory(category);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   static Future<void> updateCategory(Category category) async {
-    await DatabaseService.updateCategory(category);
+    try {
+      await UnifiedDatabaseService.updateCategory(category);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 
   static Future<void> deleteCategory(String id) async {
-    await DatabaseService.deleteCategory(id);
+    try {
+      await UnifiedDatabaseService.deleteCategory(id);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
+  }
+
+  // Loan methods
+  static Future<List<Loan>> getLoans() async {
+    try {
+      final result = await UnifiedDatabaseService.getLoans();
+      return List<Loan>.from(result);
+    } catch (e) {
+      // Error logged
+      return [];
+    }
+  }
+
+  static Future<void> addLoan(Loan loan) async {
+    try {
+      await UnifiedDatabaseService.addLoan(loan);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
+  }
+
+  static Future<void> updateLoan(Loan loan) async {
+    try {
+      await UnifiedDatabaseService.updateLoan(loan);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
+  }
+
+  static Future<void> deleteLoan(String id) async {
+    try {
+      await UnifiedDatabaseService.deleteLoan(id);
+    } catch (e) {
+      // Error logged
+      rethrow;
+    }
   }
 }

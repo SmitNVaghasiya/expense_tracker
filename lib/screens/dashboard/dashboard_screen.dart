@@ -4,7 +4,7 @@ import 'package:spendwise/models/loan.dart';
 import 'package:spendwise/models/account.dart';
 import 'package:spendwise/services/data_service.dart';
 import 'package:spendwise/services/loan_service.dart';
-import 'package:spendwise/services/app_state.dart';
+import 'package:spendwise/services/optimized_app_state.dart';
 import 'package:spendwise/screens/transactions/calculator_transaction_screen.dart';
 import 'package:spendwise/screens/shared/custom_drawer.dart';
 import 'package:spendwise/services/currency_provider.dart';
@@ -51,7 +51,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     // Listen to AppState changes to refresh dashboard when transactions are updated
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final appState = Provider.of<AppState>(context, listen: false);
+      final appState = Provider.of<OptimizedAppState>(context, listen: false);
       appState.addListener(_onAppStateChanged);
     });
 
@@ -70,12 +70,18 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   void dispose() {
-    // Remove listener when disposing
-    final appState = Provider.of<AppState>(context, listen: false);
-    appState.removeListener(_onAppStateChanged);
-
-    // Remove lifecycle observer
+    // Remove lifecycle observer first
     WidgetsBinding.instance.removeObserver(this);
+
+    // Only access context if still mounted
+    if (mounted) {
+      try {
+        final appState = Provider.of<OptimizedAppState>(context, listen: false);
+        appState.removeListener(_onAppStateChanged);
+      } catch (e) {
+        // Ignore errors when accessing context after dispose
+      }
+    }
 
     super.dispose();
   }
@@ -84,7 +90,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     // Refresh dashboard when AppState changes
     if (mounted) {
       // Only refresh if we have new transactions to avoid unnecessary refreshes
-      final appState = Provider.of<AppState>(context, listen: false);
+      final appState = Provider.of<OptimizedAppState>(context, listen: false);
       if (appState.transactions.length != _allTransactions.length ||
           _hasNewTransactions(appState.transactions)) {
         _loadData();
@@ -111,20 +117,21 @@ class _DashboardScreenState extends State<DashboardScreen>
         });
       }
 
-      final appState = Provider.of<AppState>(context, listen: false);
+      final appState = Provider.of<OptimizedAppState>(context, listen: false);
       final loans = await LoanService.getLoans();
 
       // Get latest data from AppState
       List<Transaction> transactions;
       List<Account> accounts;
 
-      // Ensure AppState has the latest data
-      if (appState.transactions.isEmpty) {
-        await appState.loadAllData();
-      }
+      // Load essential data for current filter period
+      final essentialData = await appState.loadEssentialData(
+        filterPeriod: _getFilterPeriodString(_selectedPeriod),
+        selectedDate: _selectedDate,
+      );
 
-      transactions = appState.transactions;
-      accounts = appState.accounts;
+      transactions = essentialData['transactions'] ?? [];
+      accounts = essentialData['accounts'] ?? [];
 
       if (mounted) {
         // Only update state if data has actually changed
@@ -150,8 +157,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         });
       }
     } catch (e) {
-      // Log error for debugging
-      debugPrint('Error loading dashboard data: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -168,6 +173,24 @@ class _DashboardScreenState extends State<DashboardScreen>
           _isRefreshing = false;
         });
       }
+    }
+  }
+
+  // Convert filter period enum to string
+  String _getFilterPeriodString(TimePeriod period) {
+    switch (period) {
+      case TimePeriod.daily:
+        return 'daily';
+      case TimePeriod.weekly:
+        return 'weekly';
+      case TimePeriod.monthly:
+        return 'monthly';
+      case TimePeriod.threeMonths:
+        return 'threeMonths';
+      case TimePeriod.sixMonths:
+        return 'sixMonths';
+      case TimePeriod.yearly:
+        return 'yearly';
     }
   }
 
@@ -464,7 +487,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           fontSize: 14,
                           color: Theme.of(
                             context,
-                          ).colorScheme.onSurface.withOpacity(0.7),
+                          ).colorScheme.onSurface.withValues(alpha: 0.7),
                         ),
                       ),
                       Text(
@@ -496,7 +519,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           fontSize: 14,
                           color: Theme.of(
                             context,
-                          ).colorScheme.onSurface.withOpacity(0.7),
+                          ).colorScheme.onSurface.withValues(alpha: 0.7),
                         ),
                       ),
                       Text(
@@ -559,7 +582,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      drawer: const CustomDrawer(),
+      drawer: CustomDrawer(
+        onDestinationSelected: (index) {},
+      ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadData,
@@ -956,7 +981,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       fontWeight: FontWeight.w500,
                       color: Theme.of(
                         context,
-                      ).colorScheme.onSurface.withOpacity(0.7),
+                      ).colorScheme.onSurface.withValues(alpha: 0.7),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -981,7 +1006,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       fontWeight: FontWeight.w500,
                       color: Theme.of(
                         context,
-                      ).colorScheme.onSurface.withOpacity(0.7),
+                      ).colorScheme.onSurface.withValues(alpha: 0.7),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -1006,7 +1031,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       fontWeight: FontWeight.w500,
                       color: Theme.of(
                         context,
-                      ).colorScheme.onSurface.withOpacity(0.7),
+                      ).colorScheme.onSurface.withValues(alpha: 0.7),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -1229,7 +1254,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                         size: 14,
                         color: Theme.of(
                           context,
-                        ).colorScheme.onSurface.withOpacity(0.6),
+                        ).colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -1238,7 +1263,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           fontSize: 12,
                           color: Theme.of(
                             context,
-                          ).colorScheme.onSurface.withOpacity(0.6),
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
                     ],

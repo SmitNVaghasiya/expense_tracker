@@ -87,32 +87,7 @@ class AccountCard extends StatelessWidget {
       }
     }
 
-    String getAccountTypeDisplayName() {
-      switch (account.type.toLowerCase()) {
-        case 'cash':
-          return 'Cash';
-        case 'bank':
-          return 'Bank';
-        case 'credit':
-          return 'Credit Card';
-        case 'debit':
-          return 'Debit Card';
-        case 'savings':
-          return 'Savings';
-        case 'investment':
-          return 'Investment';
-        case 'loan':
-          return 'Loan';
-        case 'digital':
-          return 'Digital Wallet';
-        case 'crypto':
-          return 'Crypto';
-        case 'business':
-          return 'Business';
-        default:
-          return account.type;
-      }
-    }
+
 
     final isNegativeBalance = account.balance < 0;
     final balanceColor = getAccountColor();
@@ -122,9 +97,9 @@ class AccountCard extends StatelessWidget {
       elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: isNegativeBalance
-            ? BorderSide(color: Colors.red.withOpacity(0.3), width: 1)
-            : BorderSide.none,
+                    side: isNegativeBalance
+                ? BorderSide(color: Colors.red.withValues(alpha: 0.3), width: 1)
+                : BorderSide.none,
       ),
       child: InkWell(
         onTap: onTap,
@@ -132,7 +107,7 @@ class AccountCard extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            color: isNegativeBalance ? Colors.red.withOpacity(0.02) : null,
+            color: isNegativeBalance ? Colors.red.withValues(alpha: 0.02) : null,
           ),
           child: Padding(
             padding: EdgeInsets.all(isCompact ? 12 : 16),
@@ -145,7 +120,7 @@ class AccountCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: getAccountTypeColor().withOpacity(0.1),
+                        color: getAccountTypeColor().withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -173,9 +148,9 @@ class AccountCard extends StatelessWidget {
                             account.type.toUpperCase(),
                             style: TextStyle(
                               fontSize: 12,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withOpacity(0.7),
+                                                          color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.7),
                             ),
                           ),
                           if (!isCompact)
@@ -183,9 +158,9 @@ class AccountCard extends StatelessWidget {
                               'Created ${DateFormat('MMM dd, yyyy').format(account.createdAt)}',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurface.withOpacity(0.5),
+                                                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.5),
                               ),
                             ),
                         ],
@@ -214,7 +189,7 @@ class AccountCard extends StatelessWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: balanceColor.withOpacity(0.1),
+                              color: balanceColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(

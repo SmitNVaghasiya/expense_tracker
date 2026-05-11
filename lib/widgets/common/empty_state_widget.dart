@@ -27,7 +27,7 @@ class EmptyStateWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final effectiveIconColor = iconColor ?? theme.colorScheme.onSurface.withOpacity(0.4);
+    final effectiveIconColor = iconColor ?? theme.colorScheme.onSurface.withValues(alpha: 0.4);
     
     return Center(
       child: Padding(
@@ -40,7 +40,7 @@ class EmptyStateWidget extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: effectiveIconColor.withOpacity(0.1),
+                  color: effectiveIconColor.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -70,7 +70,7 @@ class EmptyStateWidget extends StatelessWidget {
                 message!,
                 style: TextStyle(
                   fontSize: 14,
-                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                   height: 1.4,
                 ),
                 textAlign: TextAlign.center,
@@ -163,7 +163,7 @@ class EmptyStateWithImage extends StatelessWidget {
                 message!,
                 style: TextStyle(
                   fontSize: 14,
-                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                   height: 1.4,
                 ),
                 textAlign: TextAlign.center,
@@ -255,7 +255,7 @@ class EmptyStateWithAnimation extends StatelessWidget {
                 message!,
                 style: TextStyle(
                   fontSize: 14,
-                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                   height: 1.4,
                 ),
                 textAlign: TextAlign.center,

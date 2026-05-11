@@ -242,7 +242,7 @@ class _IconPickerState extends State<IconPicker> {
                     child: Container(
                       decoration: BoxDecoration(
                         color: isSelected 
-                          ? Theme.of(context).primaryColor.withOpacity(0.2)
+                          ? Theme.of(context).primaryColor.withValues(alpha: 0.2)
                           : Colors.grey[100],
                         borderRadius: BorderRadius.circular(8),
                         border: isSelected

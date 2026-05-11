@@ -56,7 +56,7 @@ class _DisplayOptionsDialogState extends State<DisplayOptionsDialog> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.15),
+              color: Colors.black.withValues(alpha: 0.15),
               blurRadius: 15,
               offset: const Offset(0, 8),
             ),
@@ -130,7 +130,7 @@ class _DisplayOptionsDialogState extends State<DisplayOptionsDialog> {
                                   color: isSelected
                                       ? Theme.of(context).primaryColor
                                       : Theme.of(context).colorScheme.onSurface
-                                            .withOpacity(0.7),
+                                            .withValues(alpha: 0.7),
                                 ),
                               ),
                             ],
@@ -195,7 +195,7 @@ class _DisplayOptionsDialogState extends State<DisplayOptionsDialog> {
                                   color: _showTotal
                                       ? Theme.of(context).primaryColor
                                       : Theme.of(context).colorScheme.onSurface
-                                            .withOpacity(0.7),
+                                            .withValues(alpha: 0.7),
                                 ),
                               ),
                             ],
@@ -232,7 +232,7 @@ class _DisplayOptionsDialogState extends State<DisplayOptionsDialog> {
                                   color: !_showTotal
                                       ? Theme.of(context).primaryColor
                                       : Theme.of(context).colorScheme.onSurface
-                                            .withOpacity(0.7),
+                                            .withValues(alpha: 0.7),
                                 ),
                               ),
                             ],
@@ -297,7 +297,7 @@ class _DisplayOptionsDialogState extends State<DisplayOptionsDialog> {
                                   color: _carryOver
                                       ? Theme.of(context).primaryColor
                                       : Theme.of(context).colorScheme.onSurface
-                                            .withOpacity(0.7),
+                                            .withValues(alpha: 0.7),
                                 ),
                               ),
                             ],
@@ -334,7 +334,7 @@ class _DisplayOptionsDialogState extends State<DisplayOptionsDialog> {
                                   color: !_carryOver
                                       ? Theme.of(context).primaryColor
                                       : Theme.of(context).colorScheme.onSurface
-                                            .withOpacity(0.7),
+                                            .withValues(alpha: 0.7),
                                 ),
                               ),
                             ],
@@ -356,7 +356,7 @@ class _DisplayOptionsDialogState extends State<DisplayOptionsDialog> {
                   Icons.info_outline,
                   color: Theme.of(
                     context,
-                  ).colorScheme.onSurface.withOpacity(0.6),
+                  ).colorScheme.onSurface.withValues(alpha: 0.6),
                   size: 18,
                 ),
                 const SizedBox(width: 6),
@@ -365,9 +365,9 @@ class _DisplayOptionsDialogState extends State<DisplayOptionsDialog> {
                     'With Carry over enabled, monthly surplus will be added to the next month.',
                     style: TextStyle(
                       fontSize: 13,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withOpacity(0.6),
+                                          color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
                 ),

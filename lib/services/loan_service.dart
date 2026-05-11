@@ -2,24 +2,26 @@ import 'package:spendwise/models/loan.dart';
 import 'package:spendwise/models/transaction.dart';
 import 'package:spendwise/models/account.dart';
 import 'package:spendwise/services/data_service.dart';
-import 'package:spendwise/services/database_service.dart';
+import 'package:spendwise/services/unified_database_service.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:math';
 
 class LoanService {
   static Future<List<Loan>> getLoans() async {
-    return await DatabaseService.getLoans();
+    final result = await UnifiedDatabaseService.getLoans();
+    return List<Loan>.from(result);
   }
 
   static Future<void> addLoan(Loan loan) async {
-    await DatabaseService.addLoan(loan);
+    await UnifiedDatabaseService.addLoan(loan);
   }
 
   static Future<void> updateLoan(Loan loan) async {
-    await DatabaseService.updateLoan(loan);
+    await UnifiedDatabaseService.updateLoan(loan);
   }
 
   static Future<void> deleteLoan(String id) async {
-    await DatabaseService.deleteLoan(id);
+    await UnifiedDatabaseService.deleteLoan(id);
   }
 
   // New method to add a payment to a loan
@@ -41,7 +43,7 @@ class LoanService {
         nextPaymentDate: _calculateNextPaymentDate(loan),
       );
 
-      await updateLoan(updatedLoan);
+      await UnifiedDatabaseService.updateLoan(updatedLoan); // Corrected to use UnifiedDatabaseService
 
       // If auto deduct is enabled, create a transaction
       if (loan.autoDeduct && payment.accountId != null) {
@@ -148,6 +150,130 @@ class LoanService {
     };
   }
 
+  // Calculate Monthly Payment (EMI) for formal loans
+  static double calculateMonthlyPayment({
+    required double principal,
+    required double annualInterestRate,
+    required int termInMonths,
+  }) {
+    if (annualInterestRate == 0) {
+      return principal / termInMonths;
+    }
+    final monthlyInterestRate = annualInterestRate / 100 / 12;
+    final emi = principal *
+        monthlyInterestRate *
+        pow(1 + monthlyInterestRate, termInMonths) /
+        (pow(1 + monthlyInterestRate, termInMonths) - 1);
+    return emi;
+  }
+
+  // Generate Amortization Schedule
+  static List<Map<String, dynamic>> generateAmortizationSchedule({
+    required double principal,
+    required double annualInterestRate,
+    required int termInMonths,
+    DateTime? startDate,
+  }) {
+    final List<Map<String, dynamic>> schedule = [];
+    double remainingBalance = principal;
+    final monthlyInterestRate = annualInterestRate / 100 / 12;
+    final monthlyPayment = calculateMonthlyPayment(
+      principal: principal,
+      annualInterestRate: annualInterestRate,
+      termInMonths: termInMonths,
+    );
+    DateTime currentDate = startDate ?? DateTime.now();
+
+    for (int i = 1; i <= termInMonths; i++) {
+      final interestPaid = remainingBalance * monthlyInterestRate;
+      double principalPaid = monthlyPayment - interestPaid;
+
+      // Adjust last payment to clear remaining balance if it's slightly off
+      if (i == termInMonths) {
+        principalPaid = remainingBalance;
+      }
+
+      remainingBalance -= principalPaid;
+
+      schedule.add({
+        'paymentNumber': i,
+        'paymentDate': currentDate.toIso8601String(),
+        'startingBalance': principal,
+        'interestPaid': interestPaid,
+        'principalPaid': principalPaid,
+        'endingBalance': remainingBalance.clamp(0.0, double.infinity), // Ensure non-negative
+      });
+
+      // Move to next month
+      currentDate = DateTime(currentDate.year, currentDate.month + 1, currentDate.day);
+    }
+    return schedule;
+  }
+
+  // Simulate Extra Payments
+  static Map<String, dynamic> simulateExtraPayment({
+    required double principal,
+    required double annualInterestRate,
+    required int termInMonths,
+    required double extraPaymentAmount,
+    String extraPaymentFrequency = 'one-time',
+  }) {
+    double currentPrincipal = principal;
+    int currentTermInMonths = termInMonths;
+    double totalOriginalInterest = 0;
+    double totalNewInterest = 0;
+
+    final monthlyInterestRate = annualInterestRate / 100 / 12;
+    final originalMonthlyPayment = calculateMonthlyPayment(
+      principal: principal,
+      annualInterestRate: annualInterestRate,
+      termInMonths: termInMonths,
+    );
+
+    // Calculate original total interest
+    totalOriginalInterest = (originalMonthlyPayment * termInMonths) - principal;
+
+    // Simulate payments with extra amount
+    for (int i = 1; i <= currentTermInMonths; i++) {
+      if (currentPrincipal <= 0) break;
+
+      final interestPaid = currentPrincipal * monthlyInterestRate;
+      double principalPaid = originalMonthlyPayment - interestPaid;
+
+      double paymentWithExtra = originalMonthlyPayment;
+      if (extraPaymentFrequency == 'monthly') {
+        paymentWithExtra += extraPaymentAmount;
+      } else if (extraPaymentFrequency == 'one-time' && i == 1) {
+        // Apply one-time extra payment only to the first payment
+        paymentWithExtra += extraPaymentAmount;
+      }
+
+      // Ensure principal paid is not more than remaining principal
+      principalPaid = min(principalPaid, currentPrincipal);
+      double extraPrincipalPaid = max(0, paymentWithExtra - originalMonthlyPayment);
+      extraPrincipalPaid = min(extraPrincipalPaid, currentPrincipal - principalPaid);
+
+      currentPrincipal -= (principalPaid + extraPrincipalPaid);
+      totalNewInterest += interestPaid;
+
+      if (currentPrincipal <= 0) {
+        currentTermInMonths = i;
+        break;
+      }
+    }
+
+    final totalInterestSaved = totalOriginalInterest - totalNewInterest;
+    final newTotalPayments = (originalMonthlyPayment * currentTermInMonths) + (extraPaymentFrequency == 'one-time' ? extraPaymentAmount : 0);
+    final originalTotalPayments = originalMonthlyPayment * termInMonths;
+
+    return {
+      'newTermInMonths': currentTermInMonths,
+      'totalInterestSaved': totalInterestSaved,
+      'newTotalPayments': newTotalPayments,
+      'originalTotalPayments': originalTotalPayments,
+    };
+  }
+
   static DateTime? _calculateNextPaymentDate(Loan loan) {
     if (loan.paymentFrequency == null || loan.paymentFrequency == 'one-time') {
       return null;
@@ -162,7 +288,7 @@ class LoanService {
         return DateTime(
           lastPayment.year,
           lastPayment.month + 1,
-          loan.paymentDay ?? lastPayment.day,
+          lastPayment.day,
         );
       case 'weekly':
         return lastPayment.add(const Duration(days: 7));
@@ -172,13 +298,13 @@ class LoanService {
         return DateTime(
           lastPayment.year,
           lastPayment.month + 3,
-          loan.paymentDay ?? lastPayment.day,
+          lastPayment.day,
         );
       case 'yearly':
         return DateTime(
           lastPayment.year + 1,
           lastPayment.month,
-          loan.paymentDay ?? lastPayment.day,
+          lastPayment.day,
         );
       default:
         return null;

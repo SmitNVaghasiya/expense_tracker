@@ -57,7 +57,9 @@ class _CurrencySelectionScreenState extends State<CurrencySelectionScreen> {
                     title: Text('${currency['name']} (${currency['code']})'),
                     subtitle: Text(currency['symbol']!),
                     value: currency['code']!,
+                    // ignore: deprecated_member_use
                     groupValue: _selectedCurrency,
+                    // ignore: deprecated_member_use
                     onChanged: (String? value) {
                       if (value != null) {
                         setState(() {

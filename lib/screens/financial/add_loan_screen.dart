@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:spendwise/models/loan.dart';
-import 'package:spendwise/models/account.dart';
-import 'package:spendwise/services/data_service.dart';
-import 'package:spendwise/services/currency_provider.dart';
-import 'package:provider/provider.dart';
+import 'package:spendwise/services/loan_service.dart';
+import 'package:flutter/services.dart'; // Added for FilteringTextInputFormatter
+import 'package:spendwise/services/data_service.dart'; // Added for DataService.getAccounts()
+import 'package:spendwise/models/account.dart'; // Added for Account model
+import 'package:provider/provider.dart'; // Added for Provider
+import 'package:spendwise/services/currency_provider.dart'; // Added for CurrencyProvider
+
 
 class AddLoanScreen extends StatefulWidget {
   final Loan? loan;
@@ -16,32 +19,33 @@ class AddLoanScreen extends StatefulWidget {
 
 class _AddLoanScreenState extends State<AddLoanScreen> {
   final _formKey = GlobalKey<FormState>();
-  late String _type;
-  late String _person;
+  late String _type; // lent or borrowed
+  late String _personName; // person or bank name
   late double _amount;
   late DateTime _date;
-  DateTime? _dueDate;
-  late String _status;
   String? _notes;
-
-  // New fields
   String? _selectedAccountId;
-  String? _paymentFrequency;
-  int? _paymentDay;
-  double? _monthlyPayment;
-  bool _autoDeduct = false;
+
+  // New fields for enhanced Loan model
+  late String _loanCategory; // personal or formal
+  double? _interestRate; // APR
+  int? _termInMonths; // total duration
+  String? _paymentFrequency; // monthly, weekly, one-time
+  double? _monthlyPayment; // EMI
+
   List<Account> _accounts = [];
 
   final List<String> _types = ['lent', 'borrowed'];
-  final List<String> _statuses = ['pending', 'repaid'];
-  final List<String> _paymentFrequencies = [
-    'one-time',
-    'monthly',
-    'weekly',
-    'biweekly',
-    'quarterly',
-    'yearly',
-  ];
+  final List<String> _loanCategories = ['personal', 'formal'];
+  final List<String> _paymentFrequencies = ['monthly', 'weekly', 'one-time'];
+
+  // Controllers for text fields to add listeners
+  final TextEditingController _personController = TextEditingController();
+  final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _interestRateController = TextEditingController();
+  final TextEditingController _termInMonthsController = TextEditingController();
+  final TextEditingController _monthlyPaymentDisplayController = TextEditingController();
+  final TextEditingController _notesController = TextEditingController();
 
   @override
   void initState() {
@@ -50,31 +54,82 @@ class _AddLoanScreenState extends State<AddLoanScreen> {
 
     if (widget.loan != null) {
       _type = widget.loan!.type;
-      _person = widget.loan!.person;
+      _personName = widget.loan!.person;
       _amount = widget.loan!.amount;
       _date = widget.loan!.date;
-      _dueDate = widget.loan!.dueDate;
-      _status = widget.loan!.status;
       _notes = widget.loan!.notes;
       _selectedAccountId = widget.loan!.accountId;
+      _loanCategory = widget.loan!.loanCategory;
+      _interestRate = widget.loan!.interestRate;
+      _termInMonths = widget.loan!.termInMonths;
       _paymentFrequency = widget.loan!.paymentFrequency;
-      _paymentDay = widget.loan!.paymentDay;
       _monthlyPayment = widget.loan!.monthlyPayment;
-      _autoDeduct = widget.loan!.autoDeduct;
+
+      // Initialize controllers with existing loan data
+      _personController.text = _personName;
+      _amountController.text = _amount.toString();
+      _interestRateController.text = _interestRate?.toString() ?? '';
+      _termInMonthsController.text = _termInMonths?.toString() ?? '';
+      _monthlyPaymentDisplayController.text = _monthlyPayment?.toStringAsFixed(2) ?? '';
+      _notesController.text = _notes ?? '';
+
     } else {
       _type = 'lent';
-      _person = '';
+      _personName = '';
       _amount = 0.0;
       _date = DateTime.now();
-      _status = 'pending';
-      _paymentFrequency = 'one-time';
-      _paymentDay = DateTime.now().day;
+      _loanCategory = 'personal';
+    }
+
+    // Add listeners for EMI calculation
+    _amountController.addListener(_calculateEMI);
+    _interestRateController.addListener(_calculateEMI);
+    _termInMonthsController.addListener(_calculateEMI);
+  }
+
+  @override
+  void dispose() {
+    _personController.dispose();
+    _amountController.removeListener(_calculateEMI);
+    _amountController.dispose();
+    _interestRateController.removeListener(_calculateEMI);
+    _interestRateController.dispose();
+    _termInMonthsController.removeListener(_calculateEMI);
+    _termInMonthsController.dispose();
+    _monthlyPaymentDisplayController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  void _calculateEMI() {
+    if (_loanCategory == 'formal') {
+      final principal = double.tryParse(_amountController.text) ?? 0.0;
+      final annualInterestRate = double.tryParse(_interestRateController.text) ?? 0.0;
+      final termInMonths = int.tryParse(_termInMonthsController.text) ?? 0;
+
+      if (principal > 0 && annualInterestRate >= 0 && termInMonths > 0) {
+        final emi = LoanService.calculateMonthlyPayment(
+          principal: principal,
+          annualInterestRate: annualInterestRate,
+          termInMonths: termInMonths,
+        );
+        setState(() {
+          _monthlyPayment = emi;
+          _monthlyPaymentDisplayController.text = emi.toStringAsFixed(2);
+        });
+      } else {
+        setState(() {
+          _monthlyPayment = null;
+          _monthlyPaymentDisplayController.text = '';
+        });
+      }
     }
   }
 
   Future<void> _loadAccounts() async {
     try {
       final accounts = await DataService.getAccounts();
+      if (!mounted) return;
       setState(() {
         _accounts = accounts;
       });
@@ -83,84 +138,49 @@ class _AddLoanScreenState extends State<AddLoanScreen> {
     }
   }
 
-  Future<void> _selectDate(BuildContext context, bool isDueDate) async {
+  Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: isDueDate && _dueDate != null ? _dueDate! : _date,
+      initialDate: _date,
       firstDate: DateTime(1800),
       lastDate: DateTime.now().add(const Duration(days: 36500)),
     );
 
     if (picked != null) {
       setState(() {
-        if (isDueDate) {
-          _dueDate = picked;
-        } else {
-          _date = picked;
-        }
+        _date = picked;
       });
     }
   }
 
-  void _saveLoan() {
+  void _saveLoan() async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
-
-      // Calculate next payment date if payment frequency is set
-      DateTime? nextPaymentDate;
-      if (_paymentFrequency != null && _paymentFrequency != 'one-time') {
-        nextPaymentDate = _calculateNextPaymentDate();
-      }
 
       final loan = Loan(
         id: widget.loan?.id,
         type: _type,
-        person: _person,
+        person: _personName,
         amount: _amount,
         date: _date,
-        dueDate: _dueDate,
-        status: _status,
         notes: _notes,
         accountId: _selectedAccountId,
+        loanCategory: _loanCategory,
+        interestRate: _interestRate,
+        termInMonths: _termInMonths,
         paymentFrequency: _paymentFrequency,
-        paymentDay: _paymentDay,
-        monthlyPayment: _monthlyPayment,
-        autoDeduct: _autoDeduct,
-        nextPaymentDate: nextPaymentDate,
+        monthlyPayment: _monthlyPayment, // Use the calculated EMI
       );
 
-      Navigator.pop(context, loan);
+      if (widget.loan != null) {
+        await LoanService.updateLoan(loan);
+      } else {
+        await LoanService.addLoan(loan);
+      }
+
+      if (!mounted) return;
+      Navigator.pop(context, true);
     }
-  }
-
-  DateTime _calculateNextPaymentDate() {
-    final now = DateTime.now();
-    DateTime nextDate;
-
-    switch (_paymentFrequency) {
-      case 'monthly':
-        nextDate = DateTime(now.year, now.month, _paymentDay ?? now.day);
-        if (nextDate.isBefore(now)) {
-          nextDate = DateTime(now.year, now.month + 1, _paymentDay ?? now.day);
-        }
-        break;
-      case 'weekly':
-        nextDate = now.add(const Duration(days: 7));
-        break;
-      case 'biweekly':
-        nextDate = now.add(const Duration(days: 14));
-        break;
-      case 'quarterly':
-        nextDate = DateTime(now.year, now.month + 3, _paymentDay ?? now.day);
-        break;
-      case 'yearly':
-        nextDate = DateTime(now.year + 1, now.month, _paymentDay ?? now.day);
-        break;
-      default:
-        nextDate = now;
-    }
-
-    return nextDate;
   }
 
   @override
@@ -181,7 +201,43 @@ class _AddLoanScreenState extends State<AddLoanScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Loan type
+              // Loan Category (Personal vs Formal)
+              const Text(
+                'Loan Category',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: _loanCategories.map((category) {
+                  return Expanded(
+                    child: Card(
+                      color: _loanCategory == category
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                      child: ListTile(
+                        title: Text(
+                          category == 'personal' ? 'Personal' : 'Formal',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: _loanCategory == category
+                                ? Colors.white
+                                : Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        onTap: () {
+                          setState(() {
+                            _loanCategory = category;
+                            _calculateEMI(); // Recalculate EMI if category changes
+                          });
+                        },
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 20),
+
+              // Loan Type (Lent vs Borrowed)
               const Text(
                 'Loan Type',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -216,39 +272,44 @@ class _AddLoanScreenState extends State<AddLoanScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Person name
+              // Person/Bank Name
               TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'Person',
-                  hintText: 'Enter person name',
-                  border: OutlineInputBorder(),
+                controller: _personController,
+                decoration: InputDecoration(
+                  labelText: _loanCategory == 'personal'
+                      ? 'Person Name'
+                      : 'Bank/Institution Name',
+                  hintText: _loanCategory == 'personal'
+                      ? 'Enter person name'
+                      : 'Enter bank name',
+                  border: const OutlineInputBorder(),
                 ),
-                initialValue: _person,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please enter person name';
+                    return 'Please enter name';
                   }
                   return null;
                 },
-                onSaved: (value) => _person = value ?? '',
+                onSaved: (value) => _personName = value ?? '',
               ),
               const SizedBox(height: 20),
 
               // Amount
               TextFormField(
+                controller: _amountController,
                 decoration: InputDecoration(
                   labelText: 'Amount',
                   hintText: 'Enter amount',
                   prefixText: '${currencyProvider.currencySymbol} ',
                   border: const OutlineInputBorder(),
                 ),
-                initialValue: _amount > 0 ? _amount.toString() : '',
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                ],
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please enter amount';
+                    return 'Please enter an amount';
                   }
                   if (double.tryParse(value) == null ||
                       double.parse(value) <= 0) {
@@ -263,7 +324,7 @@ class _AddLoanScreenState extends State<AddLoanScreen> {
               // Account selection
               if (_accounts.isNotEmpty) ...[
                 const Text(
-                  'Account',
+                  'Account (Optional)',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 10),
@@ -272,124 +333,133 @@ class _AddLoanScreenState extends State<AddLoanScreen> {
                     labelText: 'Select Account',
                     border: OutlineInputBorder(),
                   ),
-                  value: _selectedAccountId,
-                  items: _accounts.map((account) {
-                    return DropdownMenuItem(
-                      value: account.id,
-                      child: Text(account.name),
-                    );
-                  }).toList(),
+                  initialValue: _selectedAccountId,
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: null,
+                      child: Text('No Account'),
+                    ),
+                    ..._accounts.map((account) {
+                      return DropdownMenuItem(
+                        value: account.id,
+                        child: Text(account.name),
+                      );
+                    }),
+                  ],
                   onChanged: (value) {
                     setState(() {
                       _selectedAccountId = value;
                     });
                   },
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please select an account';
-                    }
-                    return null;
-                  },
                 ),
                 const SizedBox(height: 20),
               ],
 
-              // Payment frequency
-              const Text(
-                'Payment Frequency',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
-                  labelText: 'How often will you pay?',
-                  border: OutlineInputBorder(),
-                ),
-                value: _paymentFrequency,
-                items: _paymentFrequencies.map((frequency) {
-                  return DropdownMenuItem(
-                    value: frequency,
-                    child: Text(frequency.replaceAll('-', ' ').toUpperCase()),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _paymentFrequency = value;
-                    // Reset monthly payment if not monthly frequency
-                    if (value != 'monthly') {
-                      _monthlyPayment = null;
-                    }
-                  });
-                },
-              ),
-              const SizedBox(height: 20),
-
-              // Payment day (for monthly payments)
-              if (_paymentFrequency == 'monthly') ...[
+              // Formal Loan Fields (Conditional)
+              if (_loanCategory == 'formal') ...[
                 const Text(
-                  'Payment Day',
+                  'Formal Loan Details',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 10),
-                DropdownButtonFormField<int>(
+
+                // Interest Rate (APR)
+                TextFormField(
+                  controller: _interestRateController,
                   decoration: const InputDecoration(
-                    labelText: 'Day of month for payment',
+                    labelText: 'Interest Rate (APR %)',
+                    hintText: 'Annual Percentage Rate',
+                    suffixText: '%',
                     border: OutlineInputBorder(),
                   ),
-                  value: _paymentDay,
-                  items: List.generate(31, (index) => index + 1).map((day) {
-                    return DropdownMenuItem(value: day, child: Text('$day'));
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _paymentDay = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 20),
-
-                // Monthly payment amount
-                TextFormField(
-                  decoration: InputDecoration(
-                    labelText: 'Monthly Payment Amount',
-                    hintText: 'Enter monthly payment amount',
-                    prefixText: '${currencyProvider.currencySymbol} ',
-                    border: const OutlineInputBorder(),
-                  ),
-                  initialValue: _monthlyPayment?.toString() ?? '',
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                  ],
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Please enter monthly payment amount';
+                      return 'Please enter interest rate';
                     }
                     if (double.tryParse(value) == null ||
-                        double.parse(value) <= 0) {
-                      return 'Please enter a valid amount';
+                        double.parse(value) < 0) {
+                      return 'Please enter a valid interest rate';
                     }
                     return null;
                   },
-                  onSaved: (value) =>
-                      _monthlyPayment = double.tryParse(value ?? '0'),
+                  onSaved: (value) => _interestRate = double.tryParse(value ?? '0'),
                 ),
                 const SizedBox(height: 20),
-              ],
 
-              // Auto deduct option
-              if (_selectedAccountId != null &&
-                  _paymentFrequency != 'one-time') ...[
-                SwitchListTile(
-                  title: const Text('Auto Deduct from Account'),
-                  subtitle: const Text(
-                    'Automatically deduct payments from selected account',
+                // Loan Term (Months)
+                TextFormField(
+                  controller: _termInMonthsController,
+                  decoration: const InputDecoration(
+                    labelText: 'Loan Term (Months)',
+                    hintText: 'Total duration in months',
+                    suffixText: 'months',
+                    border: OutlineInputBorder(),
                   ),
-                  value: _autoDeduct,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter loan term';
+                    }
+                    if (int.tryParse(value) == null ||
+                        int.parse(value) <= 0) {
+                      return 'Please enter a valid number of months';
+                    }
+                    return null;
+                  },
+                  onSaved: (value) => _termInMonths = int.tryParse(value ?? '0'),
+                ),
+                const SizedBox(height: 20),
+
+                // Payment Frequency
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(
+                    labelText: 'Payment Frequency',
+                    border: OutlineInputBorder(),
+                  ),
+                  initialValue: _paymentFrequency,
+                  items: _paymentFrequencies.map((freq) {
+                    return DropdownMenuItem(
+                      value: freq,
+                      child: Text(freq.capitalize()),
+                    );
+                  }).toList(),
                   onChanged: (value) {
                     setState(() {
-                      _autoDeduct = value;
+                      _paymentFrequency = value;
                     });
                   },
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please select payment frequency';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // Monthly Payment (EMI) - Calculated or entered
+                TextFormField(
+                  controller: _monthlyPaymentDisplayController,
+                  decoration: InputDecoration(
+                    labelText: 'Monthly Payment (EMI)',
+                    hintText: 'Calculated or enter manually',
+                    prefixText: '${currencyProvider.currencySymbol} ',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                  ],
+                  enabled: false, // This field is for display only
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  onSaved: (value) => _monthlyPayment = double.tryParse(value ?? '0'),
                 ),
                 const SizedBox(height: 20),
               ],
@@ -399,67 +469,19 @@ class _AddLoanScreenState extends State<AddLoanScreen> {
                 title: const Text('Date'),
                 subtitle: Text('${_date.day}/${_date.month}/${_date.year}'),
                 trailing: const Icon(Icons.calendar_today),
-                onTap: () => _selectDate(context, false),
-              ),
-              const SizedBox(height: 20),
-
-              // Due date
-              ListTile(
-                title: const Text('Due Date (Optional)'),
-                subtitle: Text(
-                  _dueDate == null
-                      ? 'Not set'
-                      : '${_dueDate!.day}/${_dueDate!.month}/${_dueDate!.year}',
-                ),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: () => _selectDate(context, true),
-              ),
-              const SizedBox(height: 20),
-
-              // Status
-              const Text(
-                'Status',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: _statuses.map((status) {
-                  return Expanded(
-                    child: Card(
-                      color: _status == status
-                          ? Theme.of(context).colorScheme.primary
-                          : null,
-                      child: ListTile(
-                        title: Text(
-                          status == 'pending' ? 'Pending' : 'Repaid',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: _status == status
-                                ? Colors.white
-                                : Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        onTap: () {
-                          setState(() {
-                            _status = status;
-                          });
-                        },
-                      ),
-                    ),
-                  );
-                }).toList(),
+                onTap: () => _selectDate(context),
               ),
               const SizedBox(height: 20),
 
               // Notes
               TextFormField(
+                controller: _notesController,
                 decoration: const InputDecoration(
                   labelText: 'Notes (Optional)',
                   hintText: 'Add any additional notes',
                   border: OutlineInputBorder(),
                 ),
                 maxLines: 3,
-                initialValue: _notes,
                 onSaved: (value) => _notes = value,
               ),
             ],
@@ -467,5 +489,11 @@ class _AddLoanScreenState extends State<AddLoanScreen> {
         ),
       ),
     );
+  }
+}
+
+extension StringExtension on String {
+  String capitalize() {
+    return '${this[0].toUpperCase()}${substring(1)}';
   }
 }

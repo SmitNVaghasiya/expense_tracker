@@ -58,18 +58,18 @@ class FilterDropdown extends StatelessWidget {
             color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
             ],
           ),
           child: DropdownButtonFormField<String>(
-            value: value,
+            initialValue: value,
             items: items.map((String item) {
               return DropdownMenuItem<String>(
                 value: item,
@@ -81,7 +81,7 @@ class FilterDropdown extends StatelessWidget {
                         size: 18,
                         color: Theme.of(
                           context,
-                        ).colorScheme.onSurface.withOpacity(0.7),
+                        ).colorScheme.onSurface.withValues(alpha: 0.7),
                       ),
                       const SizedBox(width: 8),
                     ],
@@ -103,7 +103,7 @@ class FilterDropdown extends StatelessWidget {
             decoration: InputDecoration(
               hintText: hintText ?? 'Select $label',
               hintStyle: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
               ),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
@@ -112,7 +112,7 @@ class FilterDropdown extends StatelessWidget {
               ),
               suffixIcon: Icon(
                 Icons.arrow_drop_down,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
             icon: const SizedBox.shrink(),
@@ -123,30 +123,16 @@ class FilterDropdown extends StatelessWidget {
             ),
             selectedItemBuilder: (BuildContext context) {
               return items.map<Widget>((String item) {
-                return Container(
+                return Align(
                   alignment: Alignment.centerLeft,
-                  child: Row(
-                    children: [
-                      if (icon != null) ...[
-                        Icon(
-                          icon,
-                          size: 18,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      Expanded(
-                        child: Text(
-                          item,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Theme.of(context).colorScheme.primary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    item,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 );
               }).toList();

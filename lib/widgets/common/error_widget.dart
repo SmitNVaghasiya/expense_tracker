@@ -35,7 +35,7 @@ class CustomErrorWidget extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: effectiveColor.withOpacity(0.1),
+                color: effectiveColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -66,7 +66,7 @@ class CustomErrorWidget extends StatelessWidget {
               message,
               style: TextStyle(
                 fontSize: 14,
-                color: theme.colorScheme.onSurface.withOpacity(0.7),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
               ),
               textAlign: TextAlign.center,
               maxLines: 3,
@@ -200,7 +200,7 @@ class ErrorDialog extends StatelessWidget {
       content: Text(
         message,
         style: TextStyle(
-          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
           fontSize: 14,
         ),
       ),
@@ -211,7 +211,7 @@ class ErrorDialog extends StatelessWidget {
             child: Text(
               cancelText ?? 'Cancel',
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
           ),

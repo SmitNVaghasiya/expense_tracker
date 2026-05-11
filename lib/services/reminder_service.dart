@@ -34,9 +34,11 @@ class ReminderService with ChangeNotifier {
         iOS: iosSettings,
       );
 
-      await _notifications.initialize(initializationSettings);
+      await _notifications.initialize(
+        settings: initializationSettings,
+      );
     } catch (e) {
-      print('Failed to initialize notifications: $e');
+      // Error logged
     }
   }
 
@@ -122,26 +124,24 @@ class ReminderService with ChangeNotifier {
       );
 
       await _notifications.zonedSchedule(
-        1001, // Unique ID for daily reminder
-        'Daily Expense Reminder',
-        'Time to track your expenses for today!',
-        tz.TZDateTime.from(reminderTime, tz.local),
-        notificationDetails,
-        androidAllowWhileIdle: true,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
+        id: 1001,
+        title: 'Daily Expense Reminder',
+        body: 'Time to track your expenses for today!',
+        scheduledDate: tz.TZDateTime.from(reminderTime, tz.local),
+        notificationDetails: notificationDetails,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         matchDateTimeComponents: DateTimeComponents.time,
       );
     } catch (e) {
-      print('Failed to schedule reminder: $e');
+      // Error logged
     }
   }
 
   Future<void> _cancelReminder() async {
     try {
-      await _notifications.cancel(1001);
+      await _notifications.cancel(id: 1001);
     } catch (e) {
-      print('Failed to cancel reminder: $e');
+      // Error logged
     }
   }
 
@@ -168,13 +168,13 @@ class ReminderService with ChangeNotifier {
       );
 
       await _notifications.show(
-        1002, // Different ID for immediate notification
-        'Daily Expense Reminder',
-        'Time to track your expenses for today!',
-        notificationDetails,
+        id: 1002,
+        title: 'Daily Expense Reminder',
+        body: 'Time to track your expenses for today!',
+        notificationDetails: notificationDetails,
       );
     } catch (e) {
-      print('Failed to show reminder notification: $e');
+      // Error logged
     }
   }
 }

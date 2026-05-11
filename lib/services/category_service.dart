@@ -1,5 +1,5 @@
 import 'package:spendwise/models/category.dart';
-import 'package:spendwise/services/database_service.dart';
+import 'package:spendwise/services/unified_database_service.dart';
 import 'package:flutter/material.dart';
 
 class CategoryService {
@@ -147,13 +147,25 @@ class CategoryService {
   ];
 
   // Get all categories
+  static Future<List<Category>> getCategories() async {
+    try {
+      final result = await UnifiedDatabaseService.getCategories();
+      return List<Category>.from(result);
+    } catch (e) {
+      return _defaultCategories;
+    }
+  }
+
+  // Get all categories
   static Future<List<Category>> getAllCategories() async {
     try {
-      final categories = await DatabaseService.getCategories();
+      final result = await UnifiedDatabaseService.getCategories();
+      final categories = List<Category>.from(result);
       if (categories.isEmpty) {
         // Initialize with default categories if none exist
         await _initializeDefaultCategories();
-        return await DatabaseService.getCategories();
+        final result2 = await UnifiedDatabaseService.getCategories();
+        return List<Category>.from(result2);
       }
       return categories;
     } catch (e) {
@@ -165,7 +177,8 @@ class CategoryService {
   // Get categories by type
   static Future<List<Category>> getCategoriesByType(String type) async {
     try {
-      return await DatabaseService.getCategoriesByType(type);
+      final categories = await getCategories();
+      return categories.where((c) => c.type == type).toList();
     } catch (e) {
       // Error getting categories by type: $e
       return [];
@@ -175,7 +188,7 @@ class CategoryService {
   // Add new category
   static Future<bool> addCategory(Category category) async {
     try {
-      await DatabaseService.addCategory(category);
+      await UnifiedDatabaseService.addCategory(category);
       return true;
     } catch (e) {
       // Error adding category: $e
@@ -186,7 +199,7 @@ class CategoryService {
   // Update category
   static Future<bool> updateCategory(Category category) async {
     try {
-      await DatabaseService.updateCategory(category);
+      await UnifiedDatabaseService.updateCategory(category);
       return true;
     } catch (e) {
       // Error updating category: $e
@@ -197,7 +210,7 @@ class CategoryService {
   // Delete category
   static Future<bool> deleteCategory(String id) async {
     try {
-      await DatabaseService.deleteCategory(id);
+      await UnifiedDatabaseService.deleteCategory(id);
       return true;
     } catch (e) {
       // Error updating category: $e
@@ -209,11 +222,11 @@ class CategoryService {
   static Future<void> _initializeDefaultCategories() async {
     try {
       for (final category in _defaultCategories) {
-        await DatabaseService.addCategory(category);
+        await UnifiedDatabaseService.addCategory(category);
       }
-      print('Default categories initialized successfully');
+      // Default categories initialized successfully
     } catch (e) {
-      print('Error initializing default categories: $e');
+      // Error initializing default categories: $e
     }
   }
 

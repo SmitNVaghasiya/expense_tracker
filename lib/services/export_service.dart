@@ -42,14 +42,16 @@ class ExportService {
 
       csvData.writeln(
         [
-          DateFormat('yyyy-MM-dd').format(transaction.date),
-          transaction.type,
-          transaction.category,
-          transaction.title,
-          transaction.amount.toString(),
-          accountName,
-          transaction.notes ?? '',
-        ].map((field) => '"${field.replaceAll('"', '""')}"').join(','),
+              DateFormat('yyyy-MM-dd').format(transaction.date),
+              transaction.type,
+              transaction.category,
+              transaction.title,
+              transaction.amount.toString(),
+              accountName,
+              transaction.notes ?? '',
+            ]
+            .map((field) => '"${field.toString().replaceAll('"', '""')}"')
+            .join(','),
       );
     }
 
@@ -69,11 +71,13 @@ class ExportService {
     for (final account in accounts) {
       csvData.writeln(
         [
-          account.name,
-          account.type,
-          account.balance.toString(),
-          DateFormat('yyyy-MM-dd').format(account.createdAt),
-        ].map((field) => '"${field.replaceAll('"', '""')}"').join(','),
+              account.name,
+              account.type,
+              account.balance.toString(),
+              DateFormat('yyyy-MM-dd').format(account.createdAt),
+            ]
+            .map((field) => '"${field.toString().replaceAll('"', '""')}"')
+            .join(','),
       );
     }
 
@@ -93,12 +97,14 @@ class ExportService {
     for (final budget in budgets) {
       csvData.writeln(
         [
-          budget.name,
-          budget.category,
-          budget.limit.toString(),
-          DateFormat('yyyy-MM-dd').format(budget.startDate),
-          DateFormat('yyyy-MM-dd').format(budget.endDate),
-        ].map((field) => '"${field.replaceAll('"', '""')}"').join(','),
+              budget.name,
+              budget.category,
+              budget.limit.toString(),
+              DateFormat('yyyy-MM-dd').format(budget.startDate),
+              DateFormat('yyyy-MM-dd').format(budget.endDate),
+            ]
+            .map((field) => '"${field.toString().replaceAll('"', '""')}"')
+            .join(','),
       );
     }
 

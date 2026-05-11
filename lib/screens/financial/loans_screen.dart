@@ -3,23 +3,27 @@ import 'package:spendwise/models/loan.dart';
 import 'package:spendwise/models/account.dart';
 import 'package:spendwise/services/loan_service.dart';
 import 'package:spendwise/services/data_service.dart';
-import 'package:spendwise/services/loan_reminder_service.dart';
 import 'package:spendwise/screens/financial/add_loan_screen.dart';
-import 'package:spendwise/screens/reminders/loan_reminder_settings_screen.dart';
+// import 'package:spendwise/screens/financial/personal_transaction_details_screen.dart'; // Removed unused import
+import 'package:spendwise/screens/financial/add_payment_dialog.dart';
 import 'package:spendwise/services/currency_provider.dart';
-import 'package:spendwise/screens/financial/base_financial_screen.dart';
 import 'package:provider/provider.dart';
+import 'package:spendwise/screens/financial/base_financial_screen.dart';
+import 'package:spendwise/screens/shared/custom_drawer.dart';
 import 'package:spendwise/widgets/common/index.dart' as common_widgets;
 import 'package:spendwise/core/performance_mixins.dart';
 import 'package:intl/intl.dart';
+import 'package:spendwise/screens/financial/loan_details_screen.dart'; // Added import for LoanDetailsScreen
+
+enum LoanTransactionFilter { all, lent, borrowed }
 
 class LoansScreen extends BaseFinancialScreen {
   const LoansScreen({super.key})
     : super(
-        screenTitle: 'Loans',
-        screenIcon: Icons.account_balance,
-        primaryColor: Colors.orange,
-        floatingActionButtonTooltip: 'Add Loan',
+        screenTitle: 'Personal Money',
+        screenIcon: Icons.add,
+        primaryColor: Colors.blue,
+        floatingActionButtonTooltip: 'Add Transaction',
       );
 
   @override
@@ -28,37 +32,33 @@ class LoansScreen extends BaseFinancialScreen {
 
 class _LoansScreenState extends State<LoansScreen>
     with
-        SingleTickerProviderStateMixin,
         ValueNotifierMixin,
         EfficientListMixin,
         ScrollPerformanceMixin {
-  late TabController _tabController;
-
   // ValueNotifiers for efficient state management
   late final ValueNotifier<List<Loan>> _loansNotifier;
+  late final ValueNotifier<List<Loan>> _filteredLoansNotifier;
   late final ValueNotifier<List<Account>> _accountsNotifier;
   late final ValueNotifier<bool> _isLoadingNotifier;
-  late final ValueNotifier<List<Map<String, dynamic>>> _loanAlertsNotifier;
+  late final ValueNotifier<Map<String, dynamic>> _summaryNotifier;
+  
+  LoanTransactionFilter _transactionFilter = LoanTransactionFilter.all;
+  String _searchQuery = '';
+  String _statusFilter = 'All'; // 'All', 'Active', 'Settled'
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _initializeNotifiers();
     _loadData();
   }
 
   void _initializeNotifiers() {
     _loansNotifier = getNotifier('loans', []);
+    _filteredLoansNotifier = getNotifier('filteredLoans', []);
     _accountsNotifier = getNotifier('accounts', []);
     _isLoadingNotifier = getNotifier('isLoading', true);
-    _loanAlertsNotifier = getNotifier('loanAlerts', []);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
+    _summaryNotifier = getNotifier('summary', {});
   }
 
   Future<void> _loadData() async {
@@ -67,96 +67,65 @@ class _LoansScreenState extends State<LoansScreen>
     try {
       final loans = await LoanService.getLoans();
       final accounts = await DataService.getAccounts();
-      final alerts = await LoanReminderService.getLoanAlerts();
+      final summary = await LoanService.getLoanStatistics();
 
       if (mounted) {
         setState(() {
           _loansNotifier.value = loans;
           _accountsNotifier.value = accounts;
-          _loanAlertsNotifier.value = alerts;
+          _summaryNotifier.value = summary;
           _isLoadingNotifier.value = false;
         });
+        _filterLoans();
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _isLoadingNotifier.value = false;
         });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error loading loans: $e')));
-      }
-    }
-  }
-
-  Future<void> _addLoan(Loan loan) async {
-    try {
-      await LoanService.addLoan(loan);
-      await _loadData();
-      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Loan added successfully')),
+          SnackBar(content: Text('Error loading loans: $e')),
         );
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error adding loan: $e')));
-      }
     }
   }
 
-  Future<void> _updateLoan(Loan loan) async {
-    try {
-      await LoanService.updateLoan(loan);
-      await _loadData();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Loan updated successfully')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error updating loan: $e')));
-      }
+  void _filterLoans() {
+    List<Loan> filtered = _loansNotifier.value;
+
+    // Filter by type (lent/borrowed/all)
+    switch (_transactionFilter) {
+      case LoanTransactionFilter.lent:
+        filtered = filtered.where((l) => l.type == 'lent').toList();
+        break;
+      case LoanTransactionFilter.borrowed:
+        filtered = filtered.where((l) => l.type == 'borrowed').toList();
+        break;
+      case LoanTransactionFilter.all:
+        break;
     }
-  }
 
-  Future<void> _processAutoDeductions() async {
-    try {
-      final results = await LoanReminderService.processAutoDeductions();
+    // Filter by search query (person name, notes)
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      filtered = filtered.where((l) =>
+        l.person.toLowerCase().contains(q) ||
+        (l.notes?.toLowerCase().contains(q) ?? false)
+      ).toList();
+    }
 
-      if (results.isNotEmpty) {
-        String message = '';
-        for (final result in results) {
-          if (result['status'] == 'success') {
-            message += '✓ ${result['message']}\n';
-          } else {
-            message += '✗ ${result['message']}\n';
-          }
+    // Filter by status
+    if (_statusFilter != 'All') {
+      filtered = filtered.where((l) {
+        switch (_statusFilter) {
+          case 'Active': return l.status == 'pending' || l.remainingAmount > 0;
+          case 'Settled': return l.status == 'repaid' || l.remainingAmount <= 0;
+          default: return true;
         }
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(message.trim()),
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-
-        await _loadData(); // Reload data to reflect changes
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error processing auto-deductions: $e')),
-        );
-      }
+      }).toList();
     }
+
+    _filteredLoansNotifier.value = filtered;
   }
 
   Future<void> _deleteLoan(Loan loan) async {
@@ -187,163 +156,46 @@ class _LoansScreenState extends State<LoansScreen>
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Error deleting loan: $e')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting loan: $e')),
+          );
         }
       }
     }
   }
 
-  void _navigateToAddLoan() async {
-    final result = await Navigator.push(
+  void _navigateToLoanDetails(Loan loan) {
+    Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const AddLoanScreen()),
-    );
-
-    if (result != null && result is Loan) {
-      await _addLoan(result);
-    }
-  }
-
-  void _navigateToEditLoan(Loan loan) async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => AddLoanScreen(loan: loan)),
-    );
-
-    if (result != null && result is Loan) {
-      await _updateLoan(result);
-    }
-  }
-
-  void _showDeleteConfirmation(Loan loan) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Loan'),
-        content: Text(
-          'Are you sure you want to delete this loan record for ${loan.person}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _deleteLoan(loan);
-            },
-            child: const Text('Delete'),
-          ),
-        ],
+      MaterialPageRoute(
+        builder: (context) => LoanDetailsScreen(loan: loan),
       ),
     );
   }
 
-  void _showAddPaymentDialog(Loan loan) {
-    final currencyProvider = Provider.of<CurrencyProvider>(
-      context,
-      listen: false,
-    );
-    double paymentAmount = loan.nextPaymentAmount;
-    String? selectedAccountId = loan.accountId;
-    final TextEditingController notesController = TextEditingController();
-
-    showDialog(
+  void _showAddPaymentDialog(Loan loan) async {
+    final result = await showDialog<LoanPayment>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Add Payment for ${loan.person}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Remaining Amount: ${currencyProvider.currencySymbol}${loan.remainingAmount.toStringAsFixed(2)}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              decoration: InputDecoration(
-                labelText: 'Payment Amount',
-                prefixText: '${currencyProvider.currencySymbol} ',
-                border: const OutlineInputBorder(),
-              ),
-              initialValue: paymentAmount.toString(),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              onChanged: (value) {
-                paymentAmount = double.tryParse(value) ?? 0;
-              },
-            ),
-            const SizedBox(height: 16),
-            if (_accountsNotifier.value.isNotEmpty) ...[
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
-                  labelText: 'Account',
-                  border: OutlineInputBorder(),
-                ),
-                value: selectedAccountId,
-                items: _accountsNotifier.value.map((account) {
-                  return DropdownMenuItem(
-                    value: account.id,
-                    child: Text(account.name),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  selectedAccountId = value;
-                },
-              ),
-              const SizedBox(height: 16),
-            ],
-            TextFormField(
-              decoration: const InputDecoration(
-                labelText: 'Notes (Optional)',
-                border: OutlineInputBorder(),
-              ),
-              controller: notesController,
-              maxLines: 2,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (paymentAmount > 0 && paymentAmount <= loan.remainingAmount) {
-                final payment = LoanPayment(
-                  amount: paymentAmount,
-                  date: DateTime.now(),
-                  notes: notesController.text.isNotEmpty
-                      ? notesController.text
-                      : null,
-                  accountId: selectedAccountId,
-                );
-
-                await LoanService.addPayment(loan.id, payment);
-                Navigator.pop(context);
-                await _loadData();
-
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Payment added successfully')),
-                  );
-                }
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Invalid payment amount')),
-                );
-              }
-            },
-            child: const Text('Add Payment'),
-          ),
-        ],
-      ),
+      builder: (context) => AddPaymentDialog(loan: loan),
     );
+
+    if (result != null) {
+      try {
+        await LoanService.addPayment(loan.id, result);
+        await _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Payment added successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error adding payment: $e')),
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -354,85 +206,221 @@ class _LoansScreenState extends State<LoansScreen>
       appBar: AppBar(
         title: const Text('Loans'),
         centerTitle: true,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
-        actions: [
-          IconButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const LoanReminderSettingsScreen(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.settings),
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Money Lent'),
-            Tab(text: 'Money Borrowed'),
-          ],
-        ),
+      ),
+      drawer: const CustomDrawer(),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AddLoanScreen()),
+          );
+          if (result == true && mounted) {
+            await _loadData();
+          }
+        },
+        child: const Icon(Icons.add),
       ),
       body: Column(
         children: [
-          // Summary section
           _buildSummarySection(currencyProvider),
-
-          // Loan alerts section
-          if (_loanAlertsNotifier.value.isNotEmpty) ...[
-            _buildLoanAlertsSection(),
-            const SizedBox(height: 8),
-          ],
-
-          // Loans list
+          _buildTransactionFilterPills(),
+          const SizedBox(height: 16),
+          _buildFilterSection(),
+          const SizedBox(height: 16),
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildLoansList('lent', currencyProvider),
-                _buildLoansList('borrowed', currencyProvider),
-              ],
-            ),
+            child: _buildLoansList(currencyProvider),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _navigateToAddLoan,
-        backgroundColor: Colors.orange,
-        foregroundColor: Colors.white,
-        tooltip: 'Add Loan',
-        child: const Icon(Icons.add),
+    );
+  }
+
+  // ignore: unused_element
+  Widget _buildFloatingActionButton() {
+    return FloatingActionButton(
+      onPressed: () async {
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AddLoanScreen(),
+          ),
+        );
+
+        if (result != null && result is bool && result) { // Assuming AddLoanScreen returns true on success
+          await _loadData();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Loan added successfully')),
+            );
+          }
+        }
+      },
+      child: const Icon(Icons.add),
+    );
+  }
+
+  Widget _buildTransactionFilterPills() {
+    return Center(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildFilterPill('All', LoanTransactionFilter.all, Icons.list),
+            const SizedBox(width: 8),
+            _buildFilterPill(
+              'Lent',
+              LoanTransactionFilter.lent,
+              Icons.arrow_upward,
+            ),
+            const SizedBox(width: 8),
+            _buildFilterPill(
+              'Borrowed',
+              LoanTransactionFilter.borrowed,
+              Icons.arrow_downward,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterPill(
+    String label,
+    LoanTransactionFilter filter,
+    IconData icon,
+  ) {
+    final isSelected = _transactionFilter == filter;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _transactionFilter = filter;
+          _filterLoans();
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary
+              : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Colors.grey.shade300,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected
+                  ? Colors.white
+                  : Colors.grey.shade700,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected
+                    ? Colors.white
+                    : Colors.grey.shade700,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Search loans...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          setState(() { _searchQuery = ''; });
+                          _filterLoans();
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              onChanged: (value) {
+                setState(() { _searchQuery = value; });
+                _filterLoans();
+              },
+            ),
+          ),
+          const SizedBox(width: 12),
+          PopupMenuButton<String>(
+            icon: Icon(
+              Icons.filter_list,
+              color: _statusFilter != 'All'
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+            ),
+            tooltip: 'Filter by status',
+            onSelected: (value) {
+              setState(() { _statusFilter = value; });
+              _filterLoans();
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'All',
+                child: Row(children: [
+                  const Text('All'),
+                  if (_statusFilter == 'All') const Spacer(),
+                  if (_statusFilter == 'All') const Icon(Icons.check, size: 16),
+                ]),
+              ),
+              PopupMenuItem(
+                value: 'Active',
+                child: Row(children: [
+                  const Text('Active'),
+                  if (_statusFilter == 'Active') const Spacer(),
+                  if (_statusFilter == 'Active') const Icon(Icons.check, size: 16),
+                ]),
+              ),
+              PopupMenuItem(
+                value: 'Settled',
+                child: Row(children: [
+                  const Text('Settled'),
+                  if (_statusFilter == 'Settled') const Spacer(),
+                  if (_statusFilter == 'Settled') const Icon(Icons.check, size: 16),
+                ]),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildSummarySection(CurrencyProvider currencyProvider) {
-    final lentLoans = _loansNotifier.value
-        .where((loan) => loan.type == 'lent')
-        .toList();
-    final borrowedLoans = _loansNotifier.value
-        .where((loan) => loan.type == 'borrowed')
-        .toList();
+    final summary = _summaryNotifier.value;
+    if (summary.isEmpty) return const SizedBox.shrink();
 
-    final totalLent = lentLoans.fold(0.0, (sum, loan) => sum + loan.amount);
-    final totalBorrowed = borrowedLoans.fold(
-      0.0,
-      (sum, loan) => sum + loan.amount,
-    );
-    final totalPaidLent = lentLoans.fold(
-      0.0,
-      (sum, loan) => sum + loan.paidAmount,
-    );
-    final totalPaidBorrowed = borrowedLoans.fold(
-      0.0,
-      (sum, loan) => sum + loan.paidAmount,
-    );
-    final netPosition = totalLent - totalBorrowed;
+    final totalLent = summary['totalLent'] ?? 0.0;
+    final totalBorrowed = summary['totalBorrowed'] ?? 0.0;
+    final netPosition = summary['netPosition'] ?? 0.0;
+    final pendingLoans = summary['pendingLoans'] ?? 0; // New field
+    final overdueLoans = summary['overdueLoans'] ?? 0; // New field
 
     return Card(
       margin: const EdgeInsets.all(16),
@@ -441,7 +429,7 @@ class _LoansScreenState extends State<LoansScreen>
         child: Column(
           children: [
             const Text(
-              'Loan Summary',
+              'Loan Summary', // Changed title
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
@@ -449,22 +437,40 @@ class _LoansScreenState extends State<LoansScreen>
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildSummaryItem(
-                  'Lent',
+                  'Total Lent', // Changed label
                   '${currencyProvider.currencySymbol}${totalLent.toStringAsFixed(2)}',
-                  'Paid: ${currencyProvider.currencySymbol}${totalPaidLent.toStringAsFixed(2)}',
+                  '', // Removed pending lent
                   Colors.green,
                 ),
                 _buildSummaryItem(
-                  'Borrowed',
+                  'Total Borrowed', // Changed label
                   '${currencyProvider.currencySymbol}${totalBorrowed.toStringAsFixed(2)}',
-                  'Paid: ${currencyProvider.currencySymbol}${totalPaidBorrowed.toStringAsFixed(2)}',
-                  Colors.red,
+                  '', // Removed pending borrowed
+                  Colors.orange,
                 ),
                 _buildSummaryItem(
-                  'Net',
+                  'Net Position', // Changed label
                   '${currencyProvider.currencySymbol}${netPosition.toStringAsFixed(2)}',
                   '',
                   netPosition >= 0 ? Colors.green : Colors.red,
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildSummaryItem(
+                  'Pending Loans',
+                  pendingLoans.toString(),
+                  '',
+                  Colors.blue,
+                ),
+                _buildSummaryItem(
+                  'Overdue Loans',
+                  overdueLoans.toString(),
+                  '',
+                  Colors.red,
                 ),
               ],
             ),
@@ -502,29 +508,50 @@ class _LoansScreenState extends State<LoansScreen>
     );
   }
 
-  Widget _buildLoansList(String type, CurrencyProvider currencyProvider) {
+  Widget _buildLoansList(CurrencyProvider currencyProvider) {
     if (_isLoadingNotifier.value) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final loans = _loansNotifier.value
-        .where((loan) => loan.type == type)
-        .toList();
+    final loans = _filteredLoansNotifier.value;
 
     if (loans.isEmpty) {
+      String message;
+      IconData icon;
+      
+      switch (_transactionFilter) {
+        case LoanTransactionFilter.lent:
+          message = 'No money lent yet';
+          icon = Icons.arrow_upward;
+          break;
+        case LoanTransactionFilter.borrowed:
+          message = 'No money borrowed yet';
+          icon = Icons.arrow_downward;
+          break;
+        case LoanTransactionFilter.all:
+          message = 'No loans yet';
+          icon = Icons.list;
+          break;
+      }
+
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              type == 'lent' ? Icons.arrow_upward : Icons.arrow_downward,
+              icon,
               size: 48,
               color: Colors.grey,
             ),
             const SizedBox(height: 16),
             Text(
-              type == 'lent' ? 'No money lent yet' : 'No money borrowed yet',
+              message,
               style: const TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Tap the + button to add your first loan',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
             ),
           ],
         ),
@@ -545,9 +572,8 @@ class _LoansScreenState extends State<LoansScreen>
   }
 
   Widget _buildLoanItem(Loan loan, CurrencyProvider currencyProvider) {
-    final isOverdue = loan.isOverdue;
-    final isNextPaymentDue = loan.isNextPaymentDue;
     final accountName = _getAccountName(loan.accountId);
+    final hasInterest = loan.interestRate != null && loan.interestRate! > 0;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -555,8 +581,8 @@ class _LoansScreenState extends State<LoansScreen>
         contentPadding: const EdgeInsets.all(16),
         leading: CircleAvatar(
           backgroundColor: loan.type == 'lent'
-              ? (isOverdue ? Colors.red : Colors.green)
-              : (isOverdue ? Colors.red : Colors.orange),
+              ? (loan.status == 'repaid' ? Colors.green : Colors.blue)
+              : (loan.status == 'repaid' ? Colors.green : Colors.orange),
           child: Icon(
             loan.type == 'lent' ? Icons.arrow_upward : Icons.arrow_downward,
             color: Colors.white,
@@ -566,7 +592,7 @@ class _LoansScreenState extends State<LoansScreen>
           loan.person,
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: isOverdue ? Colors.red : null,
+            color: loan.status == 'repaid' ? Colors.green : null,
           ),
         ),
         subtitle: Column(
@@ -577,14 +603,16 @@ class _LoansScreenState extends State<LoansScreen>
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 4),
-            Text(
-              'Remaining: ${currencyProvider.currencySymbol}${loan.remainingAmount.toStringAsFixed(2)}',
-              style: TextStyle(
-                color: loan.remainingAmount > 0 ? Colors.orange : Colors.green,
-                fontWeight: FontWeight.w500,
+            if (loan.remainingAmount > 0) ...[
+              Text(
+                'Remaining: ${currencyProvider.currencySymbol}${loan.remainingAmount.toStringAsFixed(2)}',
+                style: TextStyle(
+                  color: Colors.orange,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
+              const SizedBox(height: 4),
+            ],
             Text(
               DateFormat('MMM dd, yyyy').format(loan.date),
               style: const TextStyle(color: Colors.grey),
@@ -596,35 +624,19 @@ class _LoansScreenState extends State<LoansScreen>
                 style: const TextStyle(color: Colors.grey),
               ),
             ],
-            if (loan.paymentFrequency != null &&
-                loan.paymentFrequency != 'one-time') ...[
+            if (hasInterest) ...[
               const SizedBox(height: 4),
               Text(
-                'Payment: ${loan.paymentFrequency!.replaceAll('-', ' ').toUpperCase()}',
+                'Interest Rate: ${loan.interestRate}% ',
                 style: const TextStyle(color: Colors.blue),
               ),
-              if (loan.nextPaymentDate != null) ...[
+              if (loan.monthlyPayment != null) ...[
                 const SizedBox(height: 4),
                 Text(
-                  'Next: ${DateFormat('MMM dd, yyyy').format(loan.nextPaymentDate!)}',
-                  style: TextStyle(
-                    color: isNextPaymentDue ? Colors.red : Colors.blue,
-                    fontWeight: isNextPaymentDue
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-                  ),
+                  'Monthly Payment: ${currencyProvider.currencySymbol}${loan.monthlyPayment!.toStringAsFixed(2)}',
+                  style: const TextStyle(color: Colors.blue),
                 ),
               ],
-            ],
-            if (loan.dueDate != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Due: ${DateFormat('MMM dd, yyyy').format(loan.dueDate!)}',
-                style: TextStyle(
-                  color: isOverdue ? Colors.red : Colors.blue,
-                  fontWeight: isOverdue ? FontWeight.bold : FontWeight.normal,
-                ),
-              ),
             ],
             if (loan.notes != null && loan.notes!.isNotEmpty) ...[
               const SizedBox(height: 4),
@@ -643,19 +655,15 @@ class _LoansScreenState extends State<LoansScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: loan.status == 'repaid'
-                    ? Colors.green
-                    : (isOverdue ? Colors.red : Colors.orange),
+                color: loan.status == 'repaid' ? Colors.green : Colors.orange,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                loan.status == 'repaid'
-                    ? 'Repaid'
-                    : (isOverdue ? 'Overdue' : 'Pending'),
+                loan.status == 'repaid' ? 'Repaid' : 'Pending',
                 style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
             ),
-            if (loan.status == 'pending' && loan.remainingAmount > 0) ...[
+            if (loan.status != 'repaid' && loan.remainingAmount > 0) ...[
               const SizedBox(height: 8),
               ElevatedButton(
                 onPressed: () => _showAddPaymentDialog(loan),
@@ -671,14 +679,14 @@ class _LoansScreenState extends State<LoansScreen>
             ],
           ],
         ),
-        onTap: () => _navigateToEditLoan(loan),
+        onTap: () => _navigateToLoanDetails(loan),
         onLongPress: () => _showDeleteConfirmation(loan),
       ),
     );
   }
 
   String _getAccountName(String? accountId) {
-    if (accountId == null) return 'Unknown';
+    if (accountId == null) return 'N/A'; // Changed from 'Unknown' to 'N/A' for consistency
     final account = _accountsNotifier.value.firstWhere(
       (account) => account.id == accountId,
       orElse: () => Account(
@@ -692,74 +700,25 @@ class _LoansScreenState extends State<LoansScreen>
     return account.name;
   }
 
-  Widget _buildLoanAlertsSection() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Loan Alerts',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              TextButton(
-                onPressed: _processAutoDeductions,
-                child: const Text('Process Auto-Deductions'),
-              ),
-            ],
+  void _showDeleteConfirmation(Loan loan) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Loan'),
+        content: Text(
+          'Are you sure you want to delete this loan for ${loan.person}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
           ),
-          const SizedBox(height: 8),
-          ..._loanAlertsNotifier.value.map(
-            (alert) => Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: alert['severity'] == 'high'
-                    ? Colors.red.withValues(alpha: 0.1)
-                    : Colors.orange.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: alert['severity'] == 'high'
-                      ? Colors.red
-                      : Colors.orange,
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    alert['severity'] == 'high' ? Icons.warning : Icons.info,
-                    color: alert['severity'] == 'high'
-                        ? Colors.red
-                        : Colors.orange,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          alert['title'],
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: alert['severity'] == 'high'
-                                ? Colors.red
-                                : Colors.orange,
-                          ),
-                        ),
-                        Text(
-                          alert['message'],
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteLoan(loan);
+            },
+            child: const Text('Delete'),
           ),
         ],
       ),
