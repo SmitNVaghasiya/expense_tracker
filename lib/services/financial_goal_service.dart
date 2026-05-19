@@ -15,7 +15,6 @@ class FinancialGoalService {
         return [];
       }
     } catch (e) {
-      debugPrint('Error getting financial goals: $e');
       return [];
     }
   }
@@ -25,13 +24,10 @@ class FinancialGoalService {
     try {
       if (kIsWeb) {
         // For web, implement web storage
-        debugPrint('Financial goals not yet implemented for web');
       } else {
         // For mobile, implement mobile storage
-        debugPrint('Financial goals not yet implemented for mobile');
       }
     } catch (e) {
-      debugPrint('Error adding financial goal: $e');
       rethrow;
     }
   }
@@ -41,13 +37,10 @@ class FinancialGoalService {
     try {
       if (kIsWeb) {
         // For web, implement web storage
-        debugPrint('Financial goals not yet implemented for web');
       } else {
         // For mobile, implement mobile storage
-        debugPrint('Financial goals not yet implemented for mobile');
       }
     } catch (e) {
-      debugPrint('Error updating financial goal: $e');
       rethrow;
     }
   }
@@ -57,13 +50,10 @@ class FinancialGoalService {
     try {
       if (kIsWeb) {
         // For web, implement web storage
-        debugPrint('Financial goals not yet implemented for web');
       } else {
         // For mobile, implement mobile storage
-        debugPrint('Financial goals not yet implemented for mobile');
       }
     } catch (e) {
-      debugPrint('Error deleting financial goal: $e');
       rethrow;
     }
   }
@@ -77,7 +67,6 @@ class FinancialGoalService {
         orElse: () => throw Exception('Financial goal not found'),
       );
     } catch (e) {
-      debugPrint('Error getting financial goal by ID: $e');
       return null;
     }
   }
@@ -89,9 +78,8 @@ class FinancialGoalService {
       if (goal == null) return;
 
       // Placeholder implementation - implement actual transaction logic when needed
-      debugPrint('Goal progress update not yet implemented');
-    } catch (e) {
-      debugPrint('Error updating goal progress from transactions: $e');
+    } catch (_) {
+      // No-op: placeholder implementation, nothing to recover
     }
   }
 
@@ -103,7 +91,6 @@ class FinancialGoalService {
       final financialGoals = await getFinancialGoals();
       return financialGoals.where((fg) => fg.accountId == accountId).toList();
     } catch (e) {
-      debugPrint('Error getting financial goals by account: $e');
       return [];
     }
   }
@@ -116,7 +103,6 @@ class FinancialGoalService {
       final financialGoals = await getFinancialGoals();
       return financialGoals.where((fg) => fg.goalType == goalType).toList();
     } catch (e) {
-      debugPrint('Error getting financial goals by type: $e');
       return [];
     }
   }
@@ -127,7 +113,6 @@ class FinancialGoalService {
       final financialGoals = await getFinancialGoals();
       return financialGoals.where((fg) => fg.isActive).toList();
     } catch (e) {
-      debugPrint('Error getting active financial goals: $e');
       return [];
     }
   }
@@ -138,7 +123,6 @@ class FinancialGoalService {
       final financialGoals = await getFinancialGoals();
       return financialGoals.where((fg) => fg.isCompleted).toList();
     } catch (e) {
-      debugPrint('Error getting completed financial goals: $e');
       return [];
     }
   }
@@ -166,7 +150,6 @@ class FinancialGoalService {
         return false;
       }).toList();
     } catch (e) {
-      debugPrint('Error getting financial goals needing attention: $e');
       return [];
     }
   }
@@ -199,7 +182,6 @@ class FinancialGoalService {
 
       return total;
     } catch (e) {
-      debugPrint('Error getting total monthly goal contribution: $e');
       return 0.0;
     }
   }
@@ -236,7 +218,6 @@ class FinancialGoalService {
             : 0.0,
       };
     } catch (e) {
-      debugPrint('Error getting financial goals summary: $e');
       return {};
     }
   }

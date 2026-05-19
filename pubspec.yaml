@@ -28,6 +28,7 @@ dependencies:
   timezone: ^0.11.0
   image_picker: ^1.2.2
   math_expressions: ^3.1.0
+  google_fonts: ^6.2.1
   web: ^1.1.0
   # camera: ^0.11.2 # Unused
   # http: ^1.5.0 # Unused

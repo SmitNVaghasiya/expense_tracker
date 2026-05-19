@@ -20,7 +20,6 @@ class RecurringTransactionService {
         return [];
       }
     } catch (e) {
-      debugPrint('Error getting recurring transactions: $e');
       return [];
     }
   }
@@ -32,13 +31,10 @@ class RecurringTransactionService {
     try {
       if (kIsWeb) {
         // For web, implement web storage
-        debugPrint('Recurring transactions not yet implemented for web');
       } else {
         // For mobile, implement mobile storage
-        debugPrint('Recurring transactions not yet implemented for mobile');
       }
     } catch (e) {
-      debugPrint('Error adding recurring transaction: $e');
       rethrow;
     }
   }
@@ -50,13 +46,10 @@ class RecurringTransactionService {
     try {
       if (kIsWeb) {
         // For web, implement web storage
-        debugPrint('Recurring transactions not yet implemented for web');
       } else {
         // For mobile, implement mobile storage
-        debugPrint('Recurring transactions not yet implemented for mobile');
       }
     } catch (e) {
-      debugPrint('Error updating recurring transaction: $e');
       rethrow;
     }
   }
@@ -66,13 +59,10 @@ class RecurringTransactionService {
     try {
       if (kIsWeb) {
         // For web, implement web storage
-        debugPrint('Recurring transactions not yet implemented for web');
       } else {
         // For mobile, implement mobile storage
-        debugPrint('Recurring transactions not yet implemented for mobile');
       }
     } catch (e) {
-      debugPrint('Error deleting recurring transaction: $e');
       rethrow;
     }
   }
@@ -88,7 +78,6 @@ class RecurringTransactionService {
         orElse: () => throw Exception('Recurring transaction not found'),
       );
     } catch (e) {
-      debugPrint('Error getting recurring transaction by ID: $e');
       return null;
     }
   }
@@ -118,7 +107,6 @@ class RecurringTransactionService {
 
       return createdTransactions;
     } catch (e) {
-      debugPrint('Error checking and creating transactions for today: $e');
       return [];
     }
   }
@@ -143,7 +131,6 @@ class RecurringTransactionService {
       await DataService.addTransaction(transaction);
       return transaction;
     } catch (e) {
-      debugPrint('Error creating transaction from recurring: $e');
       return null;
     }
   }
@@ -158,7 +145,6 @@ class RecurringTransactionService {
           .where((rt) => rt.accountId == accountId)
           .toList();
     } catch (e) {
-      debugPrint('Error getting recurring transactions by account: $e');
       return [];
     }
   }
@@ -173,7 +159,6 @@ class RecurringTransactionService {
           .where((rt) => rt.category == category)
           .toList();
     } catch (e) {
-      debugPrint('Error getting recurring transactions by category: $e');
       return [];
     }
   }
@@ -185,7 +170,6 @@ class RecurringTransactionService {
       final recurringTransactions = await getRecurringTransactions();
       return recurringTransactions.where((rt) => rt.isActive).toList();
     } catch (e) {
-      debugPrint('Error getting active recurring transactions: $e');
       return [];
     }
   }
@@ -199,7 +183,6 @@ class RecurringTransactionService {
         await updateRecurringTransaction(pausedRecurring);
       }
     } catch (e) {
-      debugPrint('Error pausing recurring transaction: $e');
       rethrow;
     }
   }
@@ -213,7 +196,6 @@ class RecurringTransactionService {
         await updateRecurringTransaction(resumedRecurring);
       }
     } catch (e) {
-      debugPrint('Error resuming recurring transaction: $e');
       rethrow;
     }
   }
@@ -228,7 +210,6 @@ class RecurringTransactionService {
           .where((rt) => rt.isActive && rt.nextDueDate.isBefore(now))
           .toList();
     } catch (e) {
-      debugPrint('Error getting overdue recurring transactions: $e');
       return [];
     }
   }
@@ -251,7 +232,6 @@ class RecurringTransactionService {
           )
           .toList();
     } catch (e) {
-      debugPrint('Error getting upcoming recurring transactions: $e');
       return [];
     }
   }

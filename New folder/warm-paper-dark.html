@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SpendWise · Warm Paper Dark</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#111009; font-family:'Plus Jakarta Sans',system-ui,sans-serif; }
+  .page { width:1260px; margin:0 auto; padding:64px 48px 72px; }
+  .phone-row { display:flex; gap:28px; flex-wrap:wrap; margin-top:32px; }
+  .phone-frame { border-radius:40px; overflow:hidden; box-shadow:0 2px 0 #0A0906,0 8px 32px rgba(0,0,0,0.55),0 2px 8px rgba(0,0,0,0.4); flex-shrink:0; position:relative; }
+  .divider { border:none; border-top:1px solid #2A2520; margin:0 48px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useContext, createContext } = React;
+
+const ThemeCtx = createContext(null);
+const useTheme = () => useContext(ThemeCtx);
+
+const T = {
+  bg: '#1A1714', surface: '#242019', card: '#2E2820', border: '#3A342C',
+  ink: '#F0EDE5', ink2: '#B8B0A5', ink3: '#6A6258',
+  accent: '#E8704A', accentBg: '#2E1A10',
+  ok: '#5BAF76', okBg: '#12281A',
+  danger: '#E8604A', dangerBg: '#2E1208',
+  warn: '#D4853A', warnBg: '#261800',
+  hero: null, heroText: '#F0EDE5',
+  font: "'Plus Jakarta Sans', system-ui, sans-serif",
+  mono: "'JetBrains Mono', monospace",
+  pill: 10,
+  name: 'Warm Paper · Dark',
+};
+
+const TXNS = [
+  { id:1, name:'Zomato Order',   cat:'Food',      amt:'₹340',    neg:true,  icon:'🍕', date:'Today'     },
+  { id:2, name:'Salary Credit',  cat:'Income',    amt:'₹45,000', neg:false, icon:'💼', date:'Today'     },
+  { id:3, name:'Auto Rickshaw',  cat:'Transport', amt:'₹120',    neg:true,  icon:'🛺', date:'Yesterday' },
+  { id:4, name:'D-Mart Grocery', cat:'Shopping',  amt:'₹1,840',  neg:true,  icon:'🛒', date:'Yesterday' },
+  { id:5, name:'Jio Recharge',   cat:'Bills',     amt:'₹399',    neg:true,  icon:'📱', date:'18 May'    },
+];
+const BUDGETS = [
+  { cat:'Food & Dining',    spent:8200,  total:12000, clr:'#E8604A' },
+  { cat:'Transport',        spent:3400,  total:5000,  clr:'#5B7FA6' },
+  { cat:'Shopping',         spent:6800,  total:8000,  clr:'#D4853A' },
+  { cat:'Bills & Utils',    spent:5100,  total:6000,  clr:'#5BAF76' },
+  { cat:'Entertainment',    spent:2300,  total:4000,  clr:'#9A7AAA' },
+];
+const ACCOUNTS = [
+  { name:'HDFC Savings', num:'••4521', bal:'₹45,200', bg:'#1A56DB' },
+  { name:'SBI Current',  num:'••7803', bal:'₹18,750', bg:'#0891B2' },
+  { name:'Cash Wallet',  num:'',       bal:'₹4,500',  bg:'#059669' },
+];
+const LOANS = [
+  { name:'Rahul Shah',     type:'personal', dir:'lent',     amt:'₹8,000',     date:'12 Apr', status:'active', note:'For bike repair' },
+  { name:'Mom',            type:'personal', dir:'borrowed', amt:'₹15,000',    date:'02 Mar', status:'active', note:'Emergency expense' },
+  { name:'HDFC Home Loan', type:'bank',     dir:'borrowed', amt:'₹24,00,000', emi:'₹19,840', status:'active', paid:18, total:240 },
+];
+const GOALS = [
+  { name:'Emergency Fund', target:100000, saved:68000, deadline:'Dec 2026', icon:'🛡️' },
+  { name:'Goa Trip',       target:25000,  saved:12500, deadline:'Aug 2026', icon:'✈️' },
+  { name:'New Laptop',     target:80000,  saved:30000, deadline:'Mar 2027', icon:'💻' },
+];
+const REPORT_CATS = [
+  { name:'Food & Dining', pct:32, amt:'₹8,200', clr:'#E8604A' },
+  { name:'Shopping',      pct:26, amt:'₹6,800', clr:'#5B7FA6' },
+  { name:'Bills',         pct:20, amt:'₹5,100', clr:'#5BAF76' },
+  { name:'Transport',     pct:13, amt:'₹3,400', clr:'#D4853A' },
+  { name:'Other',         pct:9,  amt:'₹2,300', clr:'#9A7AAA' },
+];
+
+// ── StatusBar ─────────────────────────────────────────────────────────────────
+function StatusBar() {
+  const t = useTheme();
+  return (
+    <div style={{
+      height:44, padding:'0 20px', display:'flex', alignItems:'center',
+      justifyContent:'space-between', fontFamily:t.mono,
+      fontSize:12.5, fontWeight:600, color:t.ink, letterSpacing:'0.01em',
+    }}>
+      <span>9:41</span>
+      <div style={{ display:'flex', gap:5, alignItems:'center' }}>
+        <svg width="15" height="10" viewBox="0 0 15 10"><g fill={t.ink}>
+          <rect x="0" y="6" width="2.5" height="4" rx="0.5"/>
+          <rect x="3.5" y="4" width="2.5" height="6" rx="0.5"/>
+          <rect x="7" y="2" width="2.5" height="8" rx="0.5"/>
+          <rect x="10.5" y="0" width="2.5" height="10" rx="0.5"/>
+        </g></svg>
+        <svg width="22" height="11" viewBox="0 0 22 11">
+          <rect x="0.5" y="0.5" width="19" height="10" rx="2.5" fill="none" stroke={t.ink} strokeOpacity="0.35"/>
+          <rect x="2" y="2" width="14" height="7" rx="1.5" fill={t.ink}/>
+          <rect x="20" y="3.5" width="1.8" height="4" rx="0.6" fill={t.ink} fillOpacity="0.4"/>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+// ── BottomNav ─────────────────────────────────────────────────────────────────
+function BottomNav({ active='home' }) {
+  const t = useTheme();
+  const tabs = [
+    { id:'home',    label:'Home',    glyph:'⊞' },
+    { id:'records', label:'Records', glyph:'☰' },
+    { id:'add',     label:'',        glyph:'+', fab:true },
+    { id:'finance', label:'Finance', glyph:'◎' },
+    { id:'reports', label:'Reports', glyph:'◈' },
+  ];
+  return (
+    <div style={{
+      position:'absolute', bottom:0, left:0, right:0, height:70,
+      background:t.card, borderTop:`1px solid ${t.border}`,
+      display:'flex', alignItems:'center', paddingBottom:4,
+    }}>
+      {tabs.map(tab => {
+        const on = tab.id === active;
+        if (tab.fab) return (
+          <div key="fab" style={{ flex:1, display:'flex', justifyContent:'center' }}>
+            <div style={{
+              width:46, height:46, borderRadius:t.pill,
+              background:t.accent, color:'#fff',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              fontSize:22, fontWeight:300, marginTop:-14,
+            }}>+</div>
+          </div>
+        );
+        return (
+          <div key={tab.id} style={{
+            flex:1, display:'flex', flexDirection:'column',
+            alignItems:'center', gap:3, paddingTop:10,
+          }}>
+            <span style={{ fontSize:17, color: on ? t.accent : t.ink3 }}>{tab.glyph}</span>
+            <span style={{ fontSize:9.5, fontWeight: on ? 700 : 500, color: on ? t.accent : t.ink3, fontFamily:t.font, letterSpacing:'0.01em' }}>{tab.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── SCREEN 1 · Home Dashboard ────────────────────────────────────────────────
+function HomeScreen() {
+  const t = useTheme();
+  return (
+    <div style={{ width:'100%', height:'100%', background:t.bg, position:'relative', fontFamily:t.font, overflow:'hidden' }}>
+      <StatusBar/>
+      <div style={{ height:'calc(100% - 44px)', overflowY:'auto', paddingBottom:78 }}>
+        <div style={{ padding:'4px 14px 0' }}>
+          <div style={{ fontSize:10.5, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.1em', textTransform:'uppercase' }}>May 2026</div>
+          <div style={{ fontSize:12, color:t.ink2, marginTop:1 }}>Good morning, Smit</div>
+          <div style={{ marginTop:10, borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}`, padding:'16px 16px' }}>
+            <div style={{ fontSize:9.5, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.08em' }}>NET BALANCE</div>
+            <div style={{ fontSize:36, fontWeight:700, color:t.ink, letterSpacing:'-0.045em', lineHeight:1, marginTop:4, fontFamily:t.mono }}>₹12,450</div>
+            <div style={{ display:'flex', borderTop:`1px solid ${t.border}`, marginTop:12, paddingTop:10 }}>
+              <div style={{ flex:1, borderRight:`1px solid ${t.border}`, paddingRight:12 }}>
+                <div style={{ fontSize:9.5, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.08em' }}>INCOME</div>
+                <div style={{ fontSize:14, fontWeight:700, color:t.ok, marginTop:2, fontFamily:t.mono }}>₹45,000</div>
+              </div>
+              <div style={{ flex:1, paddingLeft:12 }}>
+                <div style={{ fontSize:9.5, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.08em' }}>EXPENSE</div>
+                <div style={{ fontSize:14, fontWeight:700, color:t.danger, marginTop:2, fontFamily:t.mono }}>₹32,550</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style={{ margin:'10px 14px 0', padding:'12px 14px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}` }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div style={{ fontSize:12, fontWeight:600, color:t.ink }}>Budget · May</div>
+            <div style={{ fontSize:10.5, color:t.ink3, fontFamily:t.mono }}>72% used</div>
+          </div>
+          <div style={{ marginTop:8, height:5, borderRadius:99, background:t.surface }}>
+            <div style={{ width:'72%', height:'100%', borderRadius:99, background:t.accent }}/>
+          </div>
+          <div style={{ fontSize:10, color:t.ink3, marginTop:5, fontFamily:t.mono }}>₹32,550 of ₹45,000 · ₹12,450 left</div>
+        </div>
+        <div style={{ padding:'14px 14px 0' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:9 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:t.ink }}>Recent</div>
+            <div style={{ fontSize:11, color:t.accent, fontWeight:600 }}>View all</div>
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+            {TXNS.map(tx => (
+              <div key={tx.id} style={{
+                display:'flex', alignItems:'center', gap:10,
+                padding:'9px 11px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}`,
+              }}>
+                <div style={{ width:34, height:34, borderRadius:9, background:t.surface, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>{tx.icon}</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:12.5, fontWeight:600, color:t.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{tx.name}</div>
+                  <div style={{ fontSize:10, color:t.ink3, marginTop:1 }}>{tx.cat} · {tx.date}</div>
+                </div>
+                <div style={{ fontSize:12.5, fontWeight:700, color:tx.neg ? t.danger : t.ok, fontFamily:t.mono, flexShrink:0 }}>{tx.neg ? '−' : '+'}{tx.amt}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <BottomNav active="home"/>
+    </div>
+  );
+}
+
+// ── SCREEN 2 · Records ────────────────────────────────────────────────────────
+function RecordsScreen() {
+  const t = useTheme();
+  const grouped = [
+    { label:'Today',     txns: TXNS.filter(x => x.date === 'Today') },
+    { label:'Yesterday', txns: TXNS.filter(x => x.date === 'Yesterday') },
+    { label:'18 May',    txns: TXNS.filter(x => x.date === '18 May') },
+  ];
+  return (
+    <div style={{ width:'100%', height:'100%', background:t.bg, position:'relative', fontFamily:t.font, overflow:'hidden' }}>
+      <StatusBar/>
+      <div style={{ height:'calc(100% - 44px)', overflowY:'auto', paddingBottom:78 }}>
+        <div style={{ padding:'4px 14px 8px' }}>
+          <div style={{ fontSize:17, fontWeight:700, color:t.ink, letterSpacing:'-0.02em' }}>Records · May 2026</div>
+        </div>
+        <div style={{ margin:'0 14px 10px', display:'flex', alignItems:'center', gap:8, padding:'9px 12px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}` }}>
+          <span style={{ fontSize:14, color:t.ink3 }}>⌕</span>
+          <span style={{ fontSize:12, color:t.ink3 }}>Search transactions…</span>
+        </div>
+        <div style={{ padding:'0 14px 12px', display:'flex', gap:6 }}>
+          {['All','Expenses','Income'].map((f, i) => (
+            <div key={f} style={{
+              height:26, padding:'0 12px', borderRadius:t.pill,
+              background: i === 0 ? t.accent : t.surface,
+              color: i === 0 ? '#fff' : t.ink3,
+              border:`1px solid ${i === 0 ? t.accent : t.border}`,
+              fontSize:10.5, fontWeight:600, display:'flex', alignItems:'center',
+            }}>{f}</div>
+          ))}
+        </div>
+        {grouped.map(grp => grp.txns.length > 0 && (
+          <div key={grp.label} style={{ padding:'0 14px', marginBottom:10 }}>
+            <div style={{ fontSize:9.5, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:6 }}>{grp.label}</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+              {grp.txns.map(tx => (
+                <div key={tx.id} style={{
+                  display:'flex', alignItems:'center', gap:10,
+                  padding:'10px 12px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}`,
+                }}>
+                  <div style={{ width:36, height:36, borderRadius:9, background:t.surface, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}>{tx.icon}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12.5, fontWeight:600, color:t.ink }}>{tx.name}</div>
+                    <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:2 }}>
+                      <div style={{ width:6, height:6, borderRadius:2, background: tx.neg ? t.danger : t.ok }}/>
+                      <div style={{ fontSize:10, color:t.ink3 }}>{tx.cat}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize:13, fontWeight:700, color:tx.neg ? t.danger : t.ok, fontFamily:t.mono }}>{tx.neg ? '−' : '+'}{tx.amt}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <BottomNav active="records"/>
+    </div>
+  );
+}
+
+// ── SCREEN 3 · Add Transaction ────────────────────────────────────────────────
+function AddScreen() {
+  const t = useTheme();
+  const cats = ['Food','Transport','Shopping','Bills','Health','Ent','Savings','Other'];
+  const keys = ['1','2','3','4','5','6','7','8','9','.','0','⌫'];
+  return (
+    <div style={{ width:'100%', height:'100%', background:t.bg, position:'relative', fontFamily:t.font, overflow:'hidden' }}>
+      <StatusBar/>
+      <div style={{ padding:'4px 14px 8px', display:'flex', alignItems:'center', gap:10 }}>
+        <div style={{ width:30, height:30, borderRadius:9, background:t.surface, border:`1px solid ${t.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, color:t.ink2 }}>←</div>
+        <div style={{ fontSize:15, fontWeight:700, color:t.ink }}>Add Transaction</div>
+      </div>
+      <div style={{ padding:'0 14px 10px', display:'flex', gap:8 }}>
+        <div style={{ flex:1, padding:'8px 0', textAlign:'center', borderRadius:t.pill, background:t.accent, color:'#fff', fontSize:12, fontWeight:700, border:`1px solid ${t.accent}` }}>Expense</div>
+        <div style={{ flex:1, padding:'8px 0', textAlign:'center', borderRadius:t.pill, background:t.surface, color:t.ink3, fontSize:12, fontWeight:600, border:`1px solid ${t.border}` }}>Income</div>
+      </div>
+      <div style={{ textAlign:'center', padding:'4px 14px 10px' }}>
+        <div style={{ fontSize:10, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.1em', marginBottom:4 }}>200+140</div>
+        <div style={{ fontSize:48, fontWeight:700, color:t.ink, letterSpacing:'-0.04em', lineHeight:1, fontFamily:t.mono }}>₹340</div>
+        <div style={{ height:2, width:48, background:t.accent, borderRadius:99, margin:'6px auto 0' }}/>
+      </div>
+      <div style={{ padding:'0 14px 8px' }}>
+        <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
+          {cats.map((c, i) => (
+            <div key={c} style={{
+              height:26, padding:'0 11px', borderRadius:t.pill,
+              background: i === 0 ? t.accent : t.surface,
+              color: i === 0 ? '#fff' : t.ink2,
+              border:`1px solid ${i === 0 ? t.accent : t.border}`,
+              fontSize:10.5, fontWeight:600, display:'flex', alignItems:'center',
+            }}>{c}</div>
+          ))}
+        </div>
+      </div>
+      <div style={{ margin:'0 14px 8px', padding:'9px 12px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}`, display:'flex', gap:8, alignItems:'center' }}>
+        <div style={{ fontSize:14 }}>📝</div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:9.5, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.06em', marginBottom:1 }}>NOTE</div>
+          <div style={{ fontSize:12, color:t.ink2 }}>Zomato lunch order</div>
+        </div>
+      </div>
+      <div style={{ padding:'0 14px', display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6 }}>
+        {keys.map((k, i) => (
+          <div key={i} style={{
+            height:42, borderRadius:t.pill,
+            background: k === '⌫' ? t.accentBg : t.card,
+            border:`1px solid ${t.border}`,
+            color: k === '⌫' ? t.accent : t.ink,
+            fontSize: k === '⌫' ? 17 : 18, fontWeight:600,
+            fontFamily:t.mono, display:'flex', alignItems:'center', justifyContent:'center',
+          }}>{k}</div>
+        ))}
+      </div>
+      <div style={{ padding:'8px 14px 0' }}>
+        <div style={{ width:'100%', height:44, borderRadius:t.pill, background:t.accent, color:'#fff', fontSize:14, fontWeight:700, fontFamily:t.font, display:'flex', alignItems:'center', justifyContent:'center' }}>Save Transaction</div>
+      </div>
+    </div>
+  );
+}
+
+// ── SCREEN 4 · Accounts ───────────────────────────────────────────────────────
+function AccountsScreen() {
+  const t = useTheme();
+  return (
+    <div style={{ width:'100%', height:'100%', background:t.bg, position:'relative', fontFamily:t.font, overflow:'hidden' }}>
+      <StatusBar/>
+      <div style={{ height:'calc(100% - 44px)', overflowY:'auto', paddingBottom:78 }}>
+        <div style={{ padding:'4px 14px 10px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ fontSize:17, fontWeight:700, color:t.ink, letterSpacing:'-0.02em' }}>Accounts</div>
+          <div style={{ height:28, padding:'0 12px', borderRadius:t.pill, background:t.accentBg, border:`1px solid ${t.accent}44`, display:'flex', alignItems:'center', fontSize:11, fontWeight:600, color:t.accent }}>+ Add</div>
+        </div>
+        <div style={{ margin:'0 14px 12px', padding:'16px 16px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}` }}>
+          <div style={{ fontSize:9.5, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.08em' }}>NET WORTH</div>
+          <div style={{ fontSize:32, fontWeight:700, color:t.ink, letterSpacing:'-0.04em', marginTop:4, lineHeight:1, fontFamily:t.mono }}>₹68,450</div>
+          <div style={{ fontSize:10.5, color:t.ink3, marginTop:6 }}>Across 3 accounts · Updated now</div>
+        </div>
+        <div style={{ padding:'0 14px', display:'flex', flexDirection:'column', gap:8 }}>
+          {ACCOUNTS.map(acc => (
+            <div key={acc.name} style={{ padding:'13px 14px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:12 }}>
+              <div style={{ width:40, height:40, borderRadius:12, background:acc.bg, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:14, fontWeight:700, flexShrink:0 }}>{acc.name[0]}</div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:t.ink }}>{acc.name}</div>
+                <div style={{ fontSize:10, color:t.ink3, fontFamily:t.mono, marginTop:1 }}>{acc.num || 'Physical cash'}</div>
+              </div>
+              <div style={{ fontSize:14, fontWeight:700, color:t.ink, fontFamily:t.mono }}>{acc.bal}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding:'14px 14px 0' }}>
+          <div style={{ fontSize:12, fontWeight:700, color:t.ink, marginBottom:8 }}>Recent · HDFC Savings</div>
+          {TXNS.slice(0,3).map(tx => (
+            <div key={tx.id} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:5, padding:'9px 11px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}` }}>
+              <div style={{ fontSize:15 }}>{tx.icon}</div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11.5, fontWeight:600, color:t.ink }}>{tx.name}</div>
+                <div style={{ fontSize:9.5, color:t.ink3 }}>{tx.date}</div>
+              </div>
+              <div style={{ fontSize:12, fontWeight:700, color:tx.neg ? t.danger : t.ok, fontFamily:t.mono }}>{tx.neg ? '−' : '+'}{tx.amt}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <BottomNav active="finance"/>
+    </div>
+  );
+}
+
+// ── SCREEN 5 · Budgets ────────────────────────────────────────────────────────
+function BudgetsScreen() {
+  const t = useTheme();
+  return (
+    <div style={{ width:'100%', height:'100%', background:t.bg, position:'relative', fontFamily:t.font, overflow:'hidden' }}>
+      <StatusBar/>
+      <div style={{ height:'calc(100% - 44px)', overflowY:'auto', paddingBottom:78 }}>
+        <div style={{ padding:'4px 14px 10px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ fontSize:17, fontWeight:700, color:t.ink }}>Budget · May 2026</div>
+          <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+            <span style={{ fontSize:16, color:t.ink2 }}>‹</span>
+            <span style={{ fontSize:16, color:t.ink2 }}>›</span>
+          </div>
+        </div>
+        <div style={{ margin:'0 14px 12px', padding:'14px 16px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}` }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end' }}>
+            <div>
+              <div style={{ fontSize:9.5, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.08em' }}>TOTAL SPENT</div>
+              <div style={{ fontSize:26, fontWeight:700, color:t.ink, letterSpacing:'-0.04em', marginTop:3, fontFamily:t.mono }}>₹25,800</div>
+            </div>
+            <div style={{ textAlign:'right' }}>
+              <div style={{ fontSize:9.5, color:t.ink3, fontFamily:t.mono }}>of ₹45,000</div>
+              <div style={{ fontSize:18, fontWeight:700, color:t.accent, fontFamily:t.mono }}>57%</div>
+            </div>
+          </div>
+          <div style={{ marginTop:10, height:6, borderRadius:99, background:t.surface }}>
+            <div style={{ width:'57%', height:'100%', borderRadius:99, background:t.accent }}/>
+          </div>
+          <div style={{ fontSize:10, color:t.ink3, marginTop:5, fontFamily:t.mono }}>₹19,200 remaining · 13 days left</div>
+        </div>
+        <div style={{ padding:'0 14px', display:'flex', flexDirection:'column', gap:7 }}>
+          {BUDGETS.map(b => {
+            const pct = Math.round((b.spent / b.total) * 100);
+            const over = pct >= 80;
+            return (
+              <div key={b.cat} style={{ padding:'11px 13px', borderRadius:t.pill, background:t.card, border:`1.5px solid ${over ? t.warn + '77' : t.border}` }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                    <div style={{ width:8, height:8, borderRadius:2, background:b.clr, flexShrink:0 }}/>
+                    <div style={{ fontSize:11.5, fontWeight:600, color:t.ink }}>{b.cat}</div>
+                  </div>
+                  <div style={{ fontSize:10.5, fontFamily:t.mono, fontWeight:600, color: over ? t.warn : t.ink3 }}>{pct}%</div>
+                </div>
+                <div style={{ marginTop:7, height:4, borderRadius:99, background:t.surface }}>
+                  <div style={{ width:`${pct}%`, height:'100%', borderRadius:99, background: over ? t.warn : b.clr }}/>
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between', marginTop:4 }}>
+                  <div style={{ fontSize:10, color:t.ink3, fontFamily:t.mono }}>₹{b.spent.toLocaleString('en-IN')}</div>
+                  <div style={{ fontSize:10, color:t.ink3, fontFamily:t.mono }}>₹{b.total.toLocaleString('en-IN')}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <BottomNav active="finance"/>
+    </div>
+  );
+}
+
+// ── SCREEN 6 · Loans List ─────────────────────────────────────────────────────
+function LoansScreen() {
+  const t = useTheme();
+  return (
+    <div style={{ width:'100%', height:'100%', background:t.bg, position:'relative', fontFamily:t.font, overflow:'hidden' }}>
+      <StatusBar/>
+      <div style={{ height:'calc(100% - 44px)', overflowY:'auto', paddingBottom:78 }}>
+        <div style={{ padding:'4px 14px 10px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ fontSize:17, fontWeight:700, color:t.ink }}>Loans</div>
+          <div style={{ height:28, padding:'0 12px', borderRadius:t.pill, background:t.accentBg, border:`1px solid ${t.accent}44`, display:'flex', alignItems:'center', fontSize:11, fontWeight:600, color:t.accent }}>+ Add</div>
+        </div>
+        <div style={{ padding:'0 14px 12px', display:'flex', gap:6 }}>
+          {['All','I Lent','I Owe','Bank'].map((f, i) => (
+            <div key={f} style={{
+              height:26, padding:'0 10px', borderRadius:t.pill,
+              background: i === 0 ? t.accent : t.surface,
+              color: i === 0 ? '#fff' : t.ink3,
+              border:`1px solid ${i === 0 ? t.accent : t.border}`,
+              fontSize:10, fontWeight:600, display:'flex', alignItems:'center', whiteSpace:'nowrap',
+            }}>{f}</div>
+          ))}
+        </div>
+        <div style={{ padding:'0 14px', display:'flex', flexDirection:'column', gap:8 }}>
+          <div style={{ padding:'13px 14px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}` }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+              <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                <div style={{ width:36, height:36, borderRadius:12, background:t.ok, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:700, fontSize:14 }}>R</div>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:600, color:t.ink }}>Rahul Shah</div>
+                  <div style={{ fontSize:10, color:t.ink3, marginTop:1 }}>Lent · 12 Apr</div>
+                </div>
+              </div>
+              <div style={{ textAlign:'right' }}>
+                <div style={{ fontSize:14, fontWeight:700, color:t.ok, fontFamily:t.mono }}>₹8,000</div>
+                <div style={{ marginTop:4, height:18, padding:'0 8px', borderRadius:99, background:t.okBg, display:'inline-flex', alignItems:'center', fontSize:9, fontWeight:700, color:t.ok }}>ACTIVE</div>
+              </div>
+            </div>
+            <div style={{ marginTop:8, fontSize:10.5, color:t.ink3, fontStyle:'italic' }}>For bike repair</div>
+          </div>
+          <div style={{ padding:'13px 14px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}` }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+              <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                <div style={{ width:36, height:36, borderRadius:12, background:t.danger, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:700, fontSize:14 }}>M</div>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:600, color:t.ink }}>Mom</div>
+                  <div style={{ fontSize:10, color:t.ink3, marginTop:1 }}>Borrowed · 02 Mar</div>
+                </div>
+              </div>
+              <div style={{ textAlign:'right' }}>
+                <div style={{ fontSize:14, fontWeight:700, color:t.danger, fontFamily:t.mono }}>₹15,000</div>
+                <div style={{ marginTop:4, height:18, padding:'0 8px', borderRadius:99, background:t.dangerBg, display:'inline-flex', alignItems:'center', fontSize:9, fontWeight:700, color:t.danger }}>ACTIVE</div>
+              </div>
+            </div>
+            <div style={{ marginTop:8, fontSize:10.5, color:t.ink3, fontStyle:'italic' }}>Emergency expense</div>
+          </div>
+          <div style={{ padding:'13px 14px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}` }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+              <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                <div style={{ width:36, height:36, borderRadius:12, background:'#1A56DB', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:700, fontSize:11 }}>HB</div>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:600, color:t.ink }}>HDFC Home Loan</div>
+                  <div style={{ fontSize:10, color:t.ink3, marginTop:1 }}>Bank · EMI ₹19,840/mo</div>
+                </div>
+              </div>
+              <div style={{ textAlign:'right' }}>
+                <div style={{ fontSize:11, fontWeight:600, color:t.ink3, fontFamily:t.mono }}>18/240</div>
+                <div style={{ fontSize:10, color:t.ink3 }}>payments</div>
+              </div>
+            </div>
+            <div style={{ marginTop:8, height:4, borderRadius:99, background:t.surface }}>
+              <div style={{ width:'7.5%', height:'100%', borderRadius:99, background:t.accent }}/>
+            </div>
+            <div style={{ fontSize:9.5, color:t.ink3, fontFamily:t.mono, marginTop:4 }}>₹3,57,120 paid · ₹20,42,880 left</div>
+          </div>
+        </div>
+      </div>
+      <BottomNav active="finance"/>
+    </div>
+  );
+}
+
+// ── SCREEN 7 · Loan Detail ────────────────────────────────────────────────────
+function LoanDetailScreen() {
+  const t = useTheme();
+  const rows = [
+    { m:'Jan 2026', p:'₹4,320', i:'₹15,520', b:'₹23,91,360' },
+    { m:'Feb 2026', p:'₹4,356', i:'₹15,484', b:'₹23,87,004' },
+    { m:'Mar 2026', p:'₹4,392', i:'₹15,448', b:'₹23,82,612' },
+    { m:'Apr 2026', p:'₹4,429', i:'₹15,411', b:'₹23,78,183' },
+  ];
+  return (
+    <div style={{ width:'100%', height:'100%', background:t.bg, position:'relative', fontFamily:t.font, overflow:'hidden' }}>
+      <StatusBar/>
+      <div style={{ height:'calc(100% - 44px)', overflowY:'auto', paddingBottom:20 }}>
+        <div style={{ padding:'4px 14px 10px', display:'flex', alignItems:'center', gap:10 }}>
+          <div style={{ width:30, height:30, borderRadius:9, background:t.surface, border:`1px solid ${t.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, color:t.ink2 }}>←</div>
+          <div style={{ fontSize:15, fontWeight:700, color:t.ink }}>HDFC Home Loan</div>
+        </div>
+        <div style={{ margin:'0 14px 12px', padding:'16px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}` }}>
+          <div style={{ fontSize:9.5, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.08em' }}>MONTHLY EMI</div>
+          <div style={{ fontSize:32, fontWeight:700, color:t.accent, fontFamily:t.mono, letterSpacing:'-0.04em', marginTop:4 }}>₹19,840</div>
+          <div style={{ fontSize:10, color:t.ink3, marginTop:2 }}>per month · 222 payments remaining</div>
+          <div style={{ display:'flex', borderTop:`1px solid ${t.border}`, marginTop:12, paddingTop:10 }}>
+            <div style={{ flex:1, borderRight:`1px solid ${t.border}`, paddingRight:12 }}>
+              <div style={{ fontSize:9, color:t.ink3, fontFamily:t.mono }}>PAID</div>
+              <div style={{ fontSize:12, fontWeight:700, color:t.ok, fontFamily:t.mono, marginTop:2 }}>₹3,57,120</div>
+            </div>
+            <div style={{ flex:1, paddingLeft:12 }}>
+              <div style={{ fontSize:9, color:t.ink3, fontFamily:t.mono }}>REMAINING</div>
+              <div style={{ fontSize:12, fontWeight:700, color:t.danger, fontFamily:t.mono, marginTop:2 }}>₹20,42,880</div>
+            </div>
+          </div>
+          <div style={{ marginTop:10, height:5, borderRadius:99, background:t.surface }}>
+            <div style={{ width:'15%', height:'100%', borderRadius:99, background:t.accent }}/>
+          </div>
+          <div style={{ fontSize:9.5, color:t.ink3, fontFamily:t.mono, marginTop:4 }}>15% paid · 18 of 240 payments</div>
+        </div>
+        <div style={{ margin:'0 14px 12px', padding:'13px 14px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}` }}>
+          <div style={{ fontSize:11, fontWeight:700, color:t.ink, marginBottom:10, letterSpacing:'0.02em' }}>Extra Payment Simulator</div>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10, padding:'8px 10px', borderRadius:8, background:t.surface, border:`1px solid ${t.border}` }}>
+            <div style={{ fontSize:12, color:t.ink3, fontFamily:t.mono }}>+</div>
+            <div style={{ fontSize:13, fontWeight:600, color:t.ink, fontFamily:t.mono }}>₹5,000</div>
+            <div style={{ fontSize:11, color:t.ink3 }}>/month extra</div>
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <div style={{ flex:1, padding:'8px', borderRadius:8, background:t.okBg, border:`1px solid ${t.ok}44`, textAlign:'center' }}>
+              <div style={{ fontSize:12, fontWeight:700, color:t.ok, fontFamily:t.mono }}>−28 months</div>
+              <div style={{ fontSize:9.5, color:t.ok, marginTop:2 }}>time saved</div>
+            </div>
+            <div style={{ flex:1, padding:'8px', borderRadius:8, background:t.accentBg, border:`1px solid ${t.accent}44`, textAlign:'center' }}>
+              <div style={{ fontSize:12, fontWeight:700, color:t.accent, fontFamily:t.mono }}>₹4,12,000</div>
+              <div style={{ fontSize:9.5, color:t.accent, marginTop:2 }}>interest saved</div>
+            </div>
+          </div>
+        </div>
+        <div style={{ padding:'0 14px' }}>
+          <div style={{ fontSize:11, fontWeight:700, color:t.ink, marginBottom:8 }}>Amortization Schedule</div>
+          <div style={{ borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}`, overflow:'hidden' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', padding:'8px 10px', background:t.surface, borderBottom:`1px solid ${t.border}` }}>
+              {['Month','Principal','Interest','Balance'].map(h => (
+                <div key={h} style={{ fontSize:8.5, fontWeight:700, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.04em' }}>{h}</div>
+              ))}
+            </div>
+            {rows.map((r, i) => (
+              <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', padding:'7px 10px', borderBottom: i < rows.length-1 ? `1px solid ${t.border}` : 'none' }}>
+                <div style={{ fontSize:8.5, color:t.ink2, fontFamily:t.mono }}>{r.m}</div>
+                <div style={{ fontSize:8.5, color:t.ok, fontFamily:t.mono }}>{r.p}</div>
+                <div style={{ fontSize:8.5, color:t.danger, fontFamily:t.mono }}>{r.i}</div>
+                <div style={{ fontSize:8.5, color:t.ink, fontFamily:t.mono }}>{r.b}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SCREEN 8 · Reports ────────────────────────────────────────────────────────
+function ReportsScreen() {
+  const t = useTheme();
+  const R = 50, CX = 68, CY = 68, circ = 2 * Math.PI * R;
+  let acc = 0;
+  const segs = REPORT_CATS.map(c => {
+    const len = (c.pct / 100) * circ;
+    const s = { ...c, offset: acc, len };
+    acc += len;
+    return s;
+  });
+  return (
+    <div style={{ width:'100%', height:'100%', background:t.bg, position:'relative', fontFamily:t.font, overflow:'hidden' }}>
+      <StatusBar/>
+      <div style={{ height:'calc(100% - 44px)', overflowY:'auto', paddingBottom:78 }}>
+        <div style={{ padding:'4px 14px 8px' }}>
+          <div style={{ fontSize:17, fontWeight:700, color:t.ink }}>Reports</div>
+        </div>
+        <div style={{ padding:'0 14px 12px', display:'flex', gap:5 }}>
+          {['Mar','Apr','May','Jun'].map((m, i) => (
+            <div key={m} style={{
+              height:26, padding:'0 11px', borderRadius:t.pill,
+              background: i === 2 ? t.accent : t.surface,
+              color: i === 2 ? '#fff' : t.ink3,
+              fontSize:11, fontWeight:600, display:'flex', alignItems:'center',
+              border:`1px solid ${i === 2 ? t.accent : t.border}`,
+            }}>{m}</div>
+          ))}
+        </div>
+        <div style={{ margin:'0 14px 12px', padding:'14px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:14 }}>
+          <div style={{ flexShrink:0 }}>
+            <svg width={136} height={136} viewBox="0 0 136 136">
+              <circle cx={CX} cy={CY} r={R} fill="none" stroke={t.surface} strokeWidth={17}/>
+              {segs.map((s, i) => (
+                <circle key={i} cx={CX} cy={CY} r={R} fill="none" stroke={s.clr} strokeWidth={17}
+                  strokeDasharray={`${s.len} ${circ - s.len}`}
+                  strokeDashoffset={circ / 4 - s.offset} strokeLinecap="butt"/>
+              ))}
+              <circle cx={CX} cy={CY} r={32} fill={t.card}/>
+              <text x={CX} y={CY-5} textAnchor="middle" fill={t.ink3} fontSize={9} fontFamily={t.mono}>SPENT</text>
+              <text x={CX} y={CY+10} textAnchor="middle" fill={t.ink} fontSize={12} fontWeight="700" fontFamily={t.mono}>₹25.8K</text>
+            </svg>
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:7, flex:1 }}>
+            {REPORT_CATS.map(c => (
+              <div key={c.name} style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <div style={{ width:7, height:7, borderRadius:2, background:c.clr, flexShrink:0 }}/>
+                <div style={{ fontSize:10.5, color:t.ink2, flex:1 }}>{c.name}</div>
+                <div style={{ fontSize:10.5, fontWeight:700, color:t.ink, fontFamily:t.mono }}>{c.pct}%</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ margin:'0 14px 12px', display:'flex', gap:8 }}>
+          {[{l:'Expense',v:'₹25,800',c:t.danger},{l:'Income',v:'₹45,000',c:t.ok},{l:'Net',v:'₹19,200',c:t.ink}].map(s => (
+            <div key={s.l} style={{ flex:1, padding:'10px 10px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}`, textAlign:'center' }}>
+              <div style={{ fontSize:9, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.06em' }}>{s.l.toUpperCase()}</div>
+              <div style={{ fontSize:12, fontWeight:700, color:s.c, fontFamily:t.mono, marginTop:3 }}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding:'0 14px' }}>
+          <div style={{ fontSize:12, fontWeight:700, color:t.ink, marginBottom:8 }}>By Category</div>
+          {REPORT_CATS.map(c => (
+            <div key={c.name} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:5, padding:'9px 11px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}` }}>
+              <div style={{ width:9, height:9, borderRadius:2.5, background:c.clr, flexShrink:0 }}/>
+              <div style={{ flex:1, fontSize:11.5, color:t.ink }}>{c.name}</div>
+              <div style={{ fontSize:11.5, fontWeight:700, color:t.ink, fontFamily:t.mono }}>{c.amt}</div>
+              <div style={{ fontSize:10.5, color:t.ink3, fontFamily:t.mono, width:26, textAlign:'right' }}>{c.pct}%</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <BottomNav active="reports"/>
+    </div>
+  );
+}
+
+// ── SCREEN 9 · Goals ──────────────────────────────────────────────────────────
+function GoalsScreen() {
+  const t = useTheme();
+  return (
+    <div style={{ width:'100%', height:'100%', background:t.bg, position:'relative', fontFamily:t.font, overflow:'hidden' }}>
+      <StatusBar/>
+      <div style={{ height:'calc(100% - 44px)', overflowY:'auto', paddingBottom:78 }}>
+        <div style={{ padding:'4px 14px 12px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ fontSize:17, fontWeight:700, color:t.ink }}>Goals</div>
+          <div style={{ height:28, padding:'0 12px', borderRadius:t.pill, background:t.accentBg, border:`1px solid ${t.accent}44`, display:'flex', alignItems:'center', fontSize:11, fontWeight:600, color:t.accent }}>+ New Goal</div>
+        </div>
+        <div style={{ padding:'0 14px', display:'flex', flexDirection:'column', gap:10 }}>
+          {GOALS.map(g => {
+            const pct = Math.round((g.saved / g.target) * 100);
+            const r = 28, circ = 2 * Math.PI * r;
+            const filled = (pct / 100) * circ;
+            return (
+              <div key={g.name} style={{ padding:'14px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}` }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                  <div style={{ position:'relative', flexShrink:0 }}>
+                    <svg width={68} height={68} viewBox="0 0 68 68">
+                      <circle cx={34} cy={34} r={r} fill="none" stroke={t.surface} strokeWidth={7}/>
+                      <circle cx={34} cy={34} r={r} fill="none" stroke={t.accent} strokeWidth={7}
+                        strokeDasharray={`${filled} ${circ - filled}`}
+                        strokeDashoffset={circ / 4} strokeLinecap="round"/>
+                      <text x={34} y={30} textAnchor="middle" fill={t.ink3} fontSize={8} fontFamily={t.mono}>SAVED</text>
+                      <text x={34} y={42} textAnchor="middle" fill={t.ink} fontSize={11} fontWeight="700" fontFamily={t.mono}>{pct}%</text>
+                    </svg>
+                    <div style={{ position:'absolute', top:-4, right:-4, fontSize:16 }}>{g.icon}</div>
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:t.ink }}>{g.name}</div>
+                    <div style={{ fontSize:10, color:t.ink3, marginTop:2 }}>₹{g.saved.toLocaleString('en-IN')} of ₹{g.target.toLocaleString('en-IN')}</div>
+                    <div style={{ marginTop:6, height:20, padding:'0 8px', borderRadius:99, background:t.surface, border:`1px solid ${t.border}`, display:'inline-flex', alignItems:'center', fontSize:9.5, color:t.ink3, fontFamily:t.mono }}>📅 {g.deadline}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <BottomNav active="finance"/>
+    </div>
+  );
+}
+
+// ── SCREEN 10 · Bill Reminders ────────────────────────────────────────────────
+function BillsScreen() {
+  const t = useTheme();
+  const upcoming = [
+    { name:'Electricity', amt:'₹1,200', due:'May 25', icon:'⚡' },
+    { name:'Netflix',     amt:'₹499',   due:'May 28', icon:'🎬' },
+    { name:'Gym',         amt:'₹1,500', due:'Jun 1',  icon:'🏋️' },
+  ];
+  return (
+    <div style={{ width:'100%', height:'100%', background:t.bg, position:'relative', fontFamily:t.font, overflow:'hidden' }}>
+      <StatusBar/>
+      <div style={{ height:'calc(100% - 44px)', overflowY:'auto', paddingBottom:78 }}>
+        <div style={{ padding:'4px 14px 12px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ fontSize:17, fontWeight:700, color:t.ink }}>Bill Reminders</div>
+          <div style={{ height:28, padding:'0 12px', borderRadius:t.pill, background:t.accentBg, border:`1px solid ${t.accent}44`, display:'flex', alignItems:'center', fontSize:11, fontWeight:600, color:t.accent }}>+ Add</div>
+        </div>
+        <div style={{ padding:'0 14px 10px' }}>
+          <div style={{ fontSize:9.5, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:8 }}>Upcoming</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            {upcoming.map(b => (
+              <div key={b.name} style={{ padding:'12px 14px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ width:36, height:36, borderRadius:10, background:t.surface, display:'flex', alignItems:'center', justifyContent:'center', fontSize:17, flexShrink:0 }}>{b.icon}</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:t.ink }}>{b.name}</div>
+                  <div style={{ fontSize:10, color:t.ink3, marginTop:1, fontFamily:t.mono }}>Due {b.due}</div>
+                </div>
+                <div style={{ textAlign:'right' }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:t.ink, fontFamily:t.mono }}>{b.amt}</div>
+                  <div style={{ marginTop:4, width:32, height:17, borderRadius:99, background:t.ok, display:'inline-flex', alignItems:'center', paddingLeft:16 }}>
+                    <div style={{ width:13, height:13, borderRadius:99, background:'#fff' }}/>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ padding:'0 14px' }}>
+          <div style={{ fontSize:9.5, color:t.danger, fontFamily:t.mono, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:8 }}>Overdue</div>
+          <div style={{ padding:'12px 14px', borderRadius:t.pill, background:t.dangerBg, border:`1.5px solid ${t.danger}55`, display:'flex', alignItems:'center', gap:12 }}>
+            <div style={{ width:36, height:36, borderRadius:10, background:t.surface, display:'flex', alignItems:'center', justifyContent:'center', fontSize:17, flexShrink:0 }}>🌐</div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:t.ink }}>Internet</div>
+              <div style={{ fontSize:10, color:t.danger, marginTop:1, fontFamily:t.mono }}>Was due May 15</div>
+            </div>
+            <div style={{ textAlign:'right' }}>
+              <div style={{ fontSize:13, fontWeight:700, color:t.danger, fontFamily:t.mono }}>₹999</div>
+              <div style={{ marginTop:4, fontSize:9, fontWeight:700, color:t.danger }}>OVERDUE</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <BottomNav active="finance"/>
+    </div>
+  );
+}
+
+// ── SCREEN 11 · Group Spending ────────────────────────────────────────────────
+function GroupsScreen() {
+  const t = useTheme();
+  return (
+    <div style={{ width:'100%', height:'100%', background:t.bg, position:'relative', fontFamily:t.font, overflow:'hidden' }}>
+      <StatusBar/>
+      <div style={{ height:'calc(100% - 44px)', overflowY:'auto', paddingBottom:78 }}>
+        <div style={{ padding:'4px 14px 12px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ fontSize:17, fontWeight:700, color:t.ink }}>Groups</div>
+          <div style={{ height:28, padding:'0 12px', borderRadius:t.pill, background:t.accentBg, border:`1px solid ${t.accent}44`, display:'flex', alignItems:'center', fontSize:11, fontWeight:600, color:t.accent }}>+ New Group</div>
+        </div>
+        <div style={{ padding:'0 14px', display:'flex', flexDirection:'column', gap:8, marginBottom:14 }}>
+          <div style={{ padding:'13px 14px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}` }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color:t.ink }}>Goa Trip 2026</div>
+                <div style={{ fontSize:10, color:t.ink3, marginTop:1 }}>4 members</div>
+              </div>
+              <div style={{ height:28, padding:'0 12px', borderRadius:t.pill, background:t.accent, display:'flex', alignItems:'center', fontSize:10.5, fontWeight:700, color:'#fff' }}>Settle Up</div>
+            </div>
+            <div style={{ marginTop:8, padding:'7px 10px', borderRadius:8, background:t.dangerBg, border:`1px solid ${t.danger}44` }}>
+              <div style={{ fontSize:10.5, color:t.danger, fontWeight:600 }}>You owe ₹3,200</div>
+            </div>
+          </div>
+          <div style={{ padding:'13px 14px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}` }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color:t.ink }}>Office Lunch</div>
+                <div style={{ fontSize:10, color:t.ink3, marginTop:1 }}>6 members</div>
+              </div>
+              <div style={{ height:24, padding:'0 10px', borderRadius:99, background:t.okBg, display:'flex', alignItems:'center', fontSize:9.5, fontWeight:700, color:t.ok }}>All Settled</div>
+            </div>
+            <div style={{ marginTop:8, padding:'7px 10px', borderRadius:8, background:t.okBg, border:`1px solid ${t.ok}44` }}>
+              <div style={{ fontSize:10.5, color:t.ok, fontWeight:600 }}>Owed ₹450 · All settled</div>
+            </div>
+          </div>
+        </div>
+        <div style={{ padding:'0 14px' }}>
+          <div style={{ fontSize:10, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:8 }}>Goa Trip 2026 · Detail</div>
+          <div style={{ display:'flex', gap:8, marginBottom:10 }}>
+            {['S','K','P','R'].map((init, i) => (
+              <div key={i} style={{ width:34, height:34, borderRadius:10, background:[t.accent,'#5B7FA6','#D4853A','#5BAF76'][i], display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:700, fontSize:13 }}>{init}</div>
+            ))}
+          </div>
+          <div style={{ padding:'11px 13px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}`, marginBottom:8 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div>
+                <div style={{ fontSize:12, fontWeight:600, color:t.ink }}>Hotel Taj</div>
+                <div style={{ fontSize:10, color:t.ink3, marginTop:1 }}>Paid by Smit · 4-way split</div>
+              </div>
+              <div style={{ fontSize:13, fontWeight:700, color:t.ink, fontFamily:t.mono }}>₹12,800</div>
+            </div>
+          </div>
+          <div style={{ padding:'10px 13px', borderRadius:t.pill, background:t.okBg, border:`1px solid ${t.ok}44` }}>
+            <div style={{ fontSize:11, color:t.ok, fontWeight:600 }}>Kiran owes you ₹3,200</div>
+          </div>
+        </div>
+      </div>
+      <BottomNav active="finance"/>
+    </div>
+  );
+}
+
+// ── SCREEN 12 · Settings ──────────────────────────────────────────────────────
+function SettingsScreen() {
+  const t = useTheme();
+  const sections = [
+    {
+      label:'Preferences',
+      rows:[
+        { icon:'💱', label:'Currency', val:'₹ INR' },
+        { icon:'🎨', label:'Theme', val:'System' },
+        { icon:'🌐', label:'Language', val:'English' },
+      ]
+    },
+    {
+      label:'Data',
+      rows:[
+        { icon:'☁️', label:'Backup & Restore', val:'' },
+        { icon:'📊', label:'Export CSV', val:'' },
+      ]
+    },
+    {
+      label:'Security',
+      rows:[
+        { icon:'🔒', label:'App Lock', val:'toggle', on:false },
+        { icon:'👆', label:'Biometric', val:'toggle', on:false },
+      ]
+    },
+    {
+      label:'About',
+      rows:[
+        { icon:'ℹ️', label:'Version', val:'v2.0.0' },
+        { icon:'⭐', label:'Rate App', val:'' },
+        { icon:'🐛', label:'Report Bug', val:'' },
+      ]
+    },
+  ];
+  return (
+    <div style={{ width:'100%', height:'100%', background:t.bg, position:'relative', fontFamily:t.font, overflow:'hidden' }}>
+      <StatusBar/>
+      <div style={{ height:'calc(100% - 44px)', overflowY:'auto', paddingBottom:78 }}>
+        <div style={{ padding:'4px 14px 12px' }}>
+          <div style={{ fontSize:17, fontWeight:700, color:t.ink }}>Settings</div>
+        </div>
+        <div style={{ margin:'0 14px 14px', padding:'14px', borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:12 }}>
+          <div style={{ width:46, height:46, borderRadius:14, background:t.accent, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:20, fontWeight:700, flexShrink:0 }}>S</div>
+          <div>
+            <div style={{ fontSize:14, fontWeight:700, color:t.ink }}>Smit Vaghasiya</div>
+            <div style={{ fontSize:11, color:t.ink3, marginTop:1 }}>smitvaghasiya11280@gmail.com</div>
+          </div>
+        </div>
+        {sections.map(sec => (
+          <div key={sec.label} style={{ padding:'0 14px', marginBottom:12 }}>
+            <div style={{ fontSize:9.5, color:t.ink3, fontFamily:t.mono, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:6 }}>{sec.label}</div>
+            <div style={{ borderRadius:t.pill, background:t.card, border:`1px solid ${t.border}`, overflow:'hidden' }}>
+              {sec.rows.map((row, i) => (
+                <div key={row.label} style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 14px', borderBottom: i < sec.rows.length-1 ? `1px solid ${t.border}` : 'none' }}>
+                  <span style={{ fontSize:15 }}>{row.icon}</span>
+                  <div style={{ flex:1, fontSize:12.5, fontWeight:500, color:t.ink }}>{row.label}</div>
+                  {row.val === 'toggle' ? (
+                    <div style={{ width:32, height:17, borderRadius:99, background:row.on ? t.ok : t.surface, border:`1px solid ${t.border}`, display:'flex', alignItems:'center', paddingLeft: row.on ? 16 : 2 }}>
+                      <div style={{ width:13, height:13, borderRadius:99, background: row.on ? '#fff' : t.ink3 }}/>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize:11, color:t.ink3, fontFamily:row.val ? t.mono : t.font }}>{row.val || '›'}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <BottomNav active="finance"/>
+    </div>
+  );
+}
+
+// ── Phone shell ───────────────────────────────────────────────────────────────
+const SW = 390, SH = 808, SC = 0.555;
+function Phone({ children }) {
+  return (
+    <div className="phone-frame" style={{ width:SW*SC, height:SH*SC, flexShrink:0 }}>
+      <div style={{ width:SW, height:SH, transform:`scale(${SC})`, transformOrigin:'top left' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+function PhoneCard({ label, num, children }) {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:10, alignItems:'center' }}>
+      <Phone>{children}</Phone>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ fontSize:12, fontWeight:700, color:'#D4CFBF', letterSpacing:'-0.01em' }}>{label}</div>
+        <div style={{ fontSize:9.5, color:'#5A5248', fontFamily:'JetBrains Mono, monospace', marginTop:2, letterSpacing:'0.04em' }}>{num}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Cover ─────────────────────────────────────────────────────────────────────
+function CoverPage() {
+  return (
+    <div className="page" style={{ minHeight:600 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:40 }}>
+        <div style={{ width:52, height:52, borderRadius:15, background:'#F0EDE5', color:'#15130D', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:22, letterSpacing:'-0.04em', fontFamily:'Plus Jakarta Sans, sans-serif' }}>S</div>
+        <div>
+          <div style={{ fontSize:10, fontWeight:700, letterSpacing:'0.14em', textTransform:'uppercase', color:'#5A5248', fontFamily:'JetBrains Mono, monospace' }}>SpendWise · Android · v2.0 MVP</div>
+          <div style={{ fontSize:16, fontWeight:700, letterSpacing:'-0.01em', marginTop:3, color:'#F0EDE5' }}>Warm Paper Dark · UI Design Pack</div>
+        </div>
+      </div>
+      <div style={{ fontSize:64, fontWeight:700, letterSpacing:'-0.045em', lineHeight:0.96, color:'#F0EDE5' }}>
+        Warm Paper<br/>
+        <span style={{ color:'#6A6258' }}>Dark Theme</span>
+      </div>
+      <div style={{ fontSize:15, color:'#B8B0A5', marginTop:24, lineHeight:1.7, maxWidth:560, fontWeight:500 }}>
+        Deep ink tones, ember accent, editorial warmth in the dark.
+        12 screens across all major app flows. Cream-on-charcoal. No AI defaults.
+      </div>
+      <div style={{ display:'flex', gap:12, marginTop:40 }}>
+        {[
+          { label:'Background', clr:'#1A1714' },
+          { label:'Card',       clr:'#2E2820' },
+          { label:'Accent',     clr:'#E8704A' },
+          { label:'Income',     clr:'#5BAF76' },
+          { label:'Expense',    clr:'#E8604A' },
+          { label:'Warn',       clr:'#D4853A' },
+        ].map(sw => (
+          <div key={sw.label} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5 }}>
+            <div style={{ width:40, height:40, borderRadius:12, background:sw.clr, border:'1.5px solid rgba(255,255,255,0.1)' }}/>
+            <div style={{ fontSize:9, fontFamily:'JetBrains Mono, monospace', color:'#5A5248', letterSpacing:'0.04em', textAlign:'center' }}>{sw.label}</div>
+          </div>
+        ))}
+        <div style={{ marginLeft:12, padding:'8px 16px', borderRadius:10, background:'#2E2820', border:'1px solid #3A342C' }}>
+          <div style={{ fontSize:11, fontFamily:'Plus Jakarta Sans, sans-serif', fontWeight:600, color:'#F0EDE5' }}>Aa — Plus Jakarta Sans</div>
+          <div style={{ fontSize:10, fontFamily:'JetBrains Mono, monospace', color:'#6A6258', marginTop:3 }}>01234 JetBrains Mono</div>
+        </div>
+      </div>
+      <div style={{ marginTop:48, display:'flex', justifyContent:'space-between', fontSize:10, fontFamily:'JetBrains Mono, monospace', color:'#5A5248', letterSpacing:'0.12em', textTransform:'uppercase', fontWeight:600 }}>
+        <span>Plus Jakarta Sans · JetBrains Mono</span>
+        <span>1 theme · 12 screens · 12 mockups</span>
+        <span>May 2026</span>
+      </div>
+    </div>
+  );
+}
+
+// ── App ───────────────────────────────────────────────────────────────────────
+function App() {
+  const screens = [
+    { label:'Home Dashboard',    num:'01', el:<HomeScreen/> },
+    { label:'Records',           num:'02', el:<RecordsScreen/> },
+    { label:'Add Transaction',   num:'03', el:<AddScreen/> },
+    { label:'Accounts',          num:'04', el:<AccountsScreen/> },
+    { label:'Budgets',           num:'05', el:<BudgetsScreen/> },
+    { label:'Loans List',        num:'06', el:<LoansScreen/> },
+    { label:'Loan Detail',       num:'07', el:<LoanDetailScreen/> },
+    { label:'Reports',           num:'08', el:<ReportsScreen/> },
+    { label:'Financial Goals',   num:'09', el:<GoalsScreen/> },
+    { label:'Bill Reminders',    num:'10', el:<BillsScreen/> },
+    { label:'Group Spending',    num:'11', el:<GroupsScreen/> },
+    { label:'Settings',          num:'12', el:<SettingsScreen/> },
+  ];
+  const rows = [];
+  for (let i = 0; i < screens.length; i += 4) {
+    rows.push(screens.slice(i, i + 4));
+  }
+  return (
+    <ThemeCtx.Provider value={T}>
+      <div style={{ background:'#111009', minHeight:'100vh', paddingBottom:60 }}>
+        <CoverPage/>
+        <hr className="divider"/>
+        <div className="page">
+          <div style={{ marginBottom:32 }}>
+            <div style={{ fontSize:10, fontWeight:700, letterSpacing:'0.14em', textTransform:'uppercase', color:'#5A5248', fontFamily:'JetBrains Mono, monospace' }}>UI Theme</div>
+            <div style={{ fontSize:36, fontWeight:700, letterSpacing:'-0.04em', lineHeight:1.1, color:'#F0EDE5', marginTop:5 }}>Warm Paper · Dark</div>
+            <div style={{ fontSize:13, color:'#8A8078', marginTop:5, fontStyle:'italic' }}>Deep charcoal · ember accent · editorial warmth</div>
+          </div>
+          {rows.map((row, ri) => (
+            <div key={ri} className="phone-row">
+              {row.map(s => (
+                <PhoneCard key={s.num} label={s.label} num={s.num}>{s.el}</PhoneCard>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </ThemeCtx.Provider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

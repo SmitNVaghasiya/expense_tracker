@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:spendwise/core/design_system.dart';
+import 'package:spendwise/core/widgets/index.dart';
 import 'package:spendwise/models/transaction.dart';
 import 'package:spendwise/models/account.dart';
 import 'package:spendwise/models/category.dart';
-import 'package:spendwise/services/data_service.dart';
+import 'package:spendwise/services/optimized_data_service.dart';
 import 'package:spendwise/services/optimized_app_state.dart';
 import 'package:spendwise/services/category_service.dart';
-import 'package:spendwise/widgets/common/index.dart' as common_widgets;
+import 'package:spendwise/services/currency_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import 'package:math_expressions/math_expressions.dart';
@@ -33,11 +36,10 @@ class _CalculatorTransactionScreenState
   String _selectedType = 'expense';
   String _displayAmount = '0';
   String _calculationString = '';
-  final List<String> _calculationHistory = [];
   String _runningTotal = '0';
   String _selectedCategory = '';
   String? _selectedAccountId;
-  String? _selectedToAccountId; // For transfer functionality
+  String? _selectedToAccountId;
   List<Account> _accounts = [];
   List<Category> _expenseCategories = [];
   List<Category> _incomeCategories = [];
@@ -53,17 +55,17 @@ class _CalculatorTransactionScreenState
     _selectedDate = widget.initialDate ?? DateTime.now();
     _loadAccounts();
 
-    // If editing a transaction, populate the fields
     if (widget.editingTransaction != null) {
-      final transaction = widget.editingTransaction!;
-      _selectedType = transaction.type;
-      _selectedCategory = transaction.category;
-      _displayAmount = transaction.amount.toString();
-      _selectedDate = transaction.date;
-      _selectedTime = TimeOfDay.fromDateTime(transaction.date);
-      _selectedAccountId = transaction.accountId;
-      _selectedToAccountId = transaction.toAccountId;
-      _notesController.text = transaction.notes ?? '';
+      final t = widget.editingTransaction!;
+      _selectedType     = t.type;
+      _selectedCategory = t.category;
+      _displayAmount    = t.amount.toStringAsFixed(0);
+      _calculationString = _displayAmount;
+      _selectedDate     = t.date;
+      _selectedTime     = TimeOfDay.fromDateTime(t.date);
+      _selectedAccountId   = t.accountId;
+      _selectedToAccountId = t.toAccountId;
+      _notesController.text = t.notes ?? '';
     }
   }
 
@@ -76,20 +78,16 @@ class _CalculatorTransactionScreenState
   void _loadCategories() {
     final appState = context.read<OptimizedAppState>();
     setState(() {
-      _expenseCategories =
-          appState.categories.where((c) => c.type == 'expense').toList();
-      _incomeCategories =
-          appState.categories.where((c) => c.type == 'income').toList();
-      _transferCategories =
-          appState.categories.where((c) => c.type == 'transfer').toList();
+      _expenseCategories  = appState.categories.where((c) => c.type == 'expense').toList();
+      _incomeCategories   = appState.categories.where((c) => c.type == 'income').toList();
+      _transferCategories = appState.categories.where((c) => c.type == 'transfer').toList();
 
       if (widget.editingTransaction == null) {
         if (_selectedType == 'expense' && _expenseCategories.isNotEmpty) {
           _selectedCategory = _expenseCategories.first.name;
         } else if (_selectedType == 'income' && _incomeCategories.isNotEmpty) {
           _selectedCategory = _incomeCategories.first.name;
-        } else if (_selectedType == 'transfer' &&
-            _transferCategories.isNotEmpty) {
+        } else if (_selectedType == 'transfer' && _transferCategories.isNotEmpty) {
           _selectedCategory = _transferCategories.first.name;
         }
       }
@@ -103,9 +101,8 @@ class _CalculatorTransactionScreenState
   }
 
   Future<void> _loadAccounts() async {
-    final accounts = await DataService.getAccounts();
+    final accounts = await OptimizedDataService.getAccounts();
 
-    // Create default account if none exist
     if (accounts.isEmpty) {
       final defaultAccount = Account(
         id: const Uuid().v4(),
@@ -115,232 +112,171 @@ class _CalculatorTransactionScreenState
         icon: 'wallet',
         createdAt: DateTime.now(),
       );
-      await DataService.addAccount(defaultAccount);
-
-      setState(() {
-        _accounts = [defaultAccount];
-        _selectedAccountId = defaultAccount.id;
-      });
+      await OptimizedDataService.addAccount(defaultAccount);
+      if (mounted) {
+        setState(() {
+          _accounts = [defaultAccount];
+          _selectedAccountId = defaultAccount.id;
+        });
+      }
     } else {
-      // Sort accounts by priority and balance for smart default selection
-      final sortedAccounts = List<Account>.from(accounts);
-      sortedAccounts.sort((a, b) {
-        // First priority: positive balance over negative
-        if (a.balance >= 0 && b.balance < 0) return -1;
-        if (a.balance < 0 && b.balance >= 0) return 1;
-
-        // Second priority: account type priority
-        final aPriority = _getAccountPriority(a.type);
-        final bPriority = _getAccountPriority(b.type);
-        if (aPriority != bPriority) return bPriority.compareTo(aPriority);
-
-        // Third priority: higher balance first
-        return b.balance.compareTo(a.balance);
-      });
-
-      setState(() {
-        _accounts = sortedAccounts;
-        // Select the best default account (first in sorted list)
-        _selectedAccountId = sortedAccounts.first.id;
-
-        // For transfer, set the second account if available
-        if (_selectedType == 'transfer' && sortedAccounts.length > 1) {
-          _selectedToAccountId = sortedAccounts[1].id;
-        }
-      });
+      final sorted = List<Account>.from(accounts)
+        ..sort((a, b) {
+          if (a.balance >= 0 && b.balance < 0) return -1;
+          if (a.balance < 0 && b.balance >= 0) return 1;
+          final ap = _accountPriority(a.type);
+          final bp = _accountPriority(b.type);
+          if (ap != bp) return bp.compareTo(ap);
+          return b.balance.compareTo(a.balance);
+        });
+      if (mounted) {
+        setState(() {
+          _accounts = sorted;
+          _selectedAccountId ??= sorted.first.id;
+          if (_selectedType == 'transfer' && sorted.length > 1) {
+            _selectedToAccountId ??= sorted[1].id;
+          }
+        });
+      }
     }
   }
 
-  void _onNumberPressed(String number) {
+  int _accountPriority(String type) {
+    const map = {'cash': 5, 'bank': 4, 'savings': 3, 'credit': 2, 'investment': 1};
+    return map[type.toLowerCase()] ?? 0;
+  }
+
+  // ── Calculator logic ───────────────────────────────────────────────────────
+
+  void _onNumber(String n) {
+    HapticFeedback.selectionClick();
     setState(() {
       if (_displayAmount == '0') {
-        _displayAmount = number;
+        _displayAmount = n;
       } else {
-        _displayAmount += number;
+        _displayAmount += n;
       }
-      _calculationString += number;
-
-      // Update running total if we have a complete expression
-      if (_calculationString.isNotEmpty &&
-          !_isOperator(_calculationString[_calculationString.length - 1])) {
-        _updateRunningTotal();
-      }
+      _calculationString += n;
+      _tryUpdateTotal();
     });
   }
 
-  void _onOperatorPressed(String operator) {
+  void _onOperator(String op) {
     if (_calculationString.isNotEmpty &&
-        !_isOperator(_calculationString[_calculationString.length - 1])) {
+        !_isOp(_calculationString[_calculationString.length - 1])) {
+      HapticFeedback.selectionClick();
       setState(() {
-        _calculationString += operator;
+        _calculationString += op;
         _displayAmount = '0';
       });
     }
   }
 
-  void _updateRunningTotal() {
+  void _onEquals() {
+    HapticFeedback.lightImpact();
     try {
-      if (_calculationString.isNotEmpty) {
-        final result = _evaluateExpression(_calculationString);
-        _runningTotal = result.toStringAsFixed(2);
-      }
-    } catch (e) {
-      _runningTotal = 'Error';
-    }
-  }
-
-  void _onEqualsPressed() {
-    try {
-      final result = _evaluateExpression(_calculationString);
+      final result = _eval(_calculationString);
       setState(() {
-        _displayAmount = result.toStringAsFixed(2);
+        _displayAmount     = result.toStringAsFixed(2);
         _calculationString = _displayAmount;
-        _runningTotal = _displayAmount;
-
-        // Add to calculation history
-        if (_calculationString.isNotEmpty) {
-          _calculationHistory.add(_calculationString);
-          if (_calculationHistory.length > 10) {
-            _calculationHistory.removeAt(0);
-          }
-        }
+        _runningTotal      = _displayAmount;
       });
-    } catch (e) {
+    } catch (_) {
       setState(() {
-        _displayAmount = 'Error';
+        _displayAmount     = 'Error';
         _calculationString = '';
-        _runningTotal = 'Error';
+        _runningTotal      = '0';
       });
     }
   }
 
-  void _onBackspacePressed() {
+  void _onBackspace() {
+    HapticFeedback.selectionClick();
     setState(() {
       if (_calculationString.isNotEmpty) {
         _calculationString = _calculationString.substring(
-          0,
-          _calculationString.length - 1,
+          0, _calculationString.length - 1,
         );
         if (_calculationString.isEmpty) {
           _displayAmount = '0';
-          _runningTotal = '0';
+          _runningTotal  = '0';
         } else {
-          // Update display to show current number being entered
           final parts = _calculationString.split(RegExp(r'[+\-×÷]'));
           _displayAmount = parts.last.isEmpty ? '0' : parts.last;
-          _updateRunningTotal();
+          _tryUpdateTotal();
         }
       }
     });
   }
 
-  void _onDecimalPressed() {
+  void _onDecimal() {
     if (!_displayAmount.contains('.')) {
       setState(() {
-        _displayAmount += '.';
+        _displayAmount     += '.';
         _calculationString += '.';
       });
     }
   }
 
-  void _onClearPressed() {
+  void _onClear() {
+    HapticFeedback.mediumImpact();
     setState(() {
-      _displayAmount = '0';
+      _displayAmount     = '0';
       _calculationString = '';
-      _runningTotal = '0';
-      _calculationHistory.clear();
+      _runningTotal      = '0';
     });
   }
 
-  bool _isOperator(String char) {
-    return ['+', '-', '×', '÷'].contains(char);
-  }
-
-  double _evaluateExpression(String expression) {
+  void _tryUpdateTotal() {
     try {
-      // Replace display operators with standard operators
-      expression = expression.replaceAll('×', '*').replaceAll('÷', '/');
-
-      // Parse the expression
-      GrammarParser p = GrammarParser();
-      Expression exp = p.parse(expression);
-
-      // Evaluate the expression
-      RealEvaluator evaluator = RealEvaluator();
-      num eval = evaluator.evaluate(exp);
-
-      return eval.toDouble();
-    } catch (e) {
-      return double.tryParse(_displayAmount) ?? 0.0;
-    }
+      if (_calculationString.isNotEmpty) {
+        _runningTotal = _eval(_calculationString).toStringAsFixed(2);
+      }
+    } catch (_) {}
   }
 
-  Future<void> _selectDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(1800),
-      lastDate: DateTime.now().add(const Duration(days: 36500)),
-    );
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
-    }
+  bool _isOp(String c) => ['+', '-', '×', '÷'].contains(c);
+
+  double _eval(String expr) {
+    expr = expr.replaceAll('×', '*').replaceAll('÷', '/');
+    final p = GrammarParser();
+    final exp = p.parse(expr);
+    final ev = RealEvaluator();
+    return ev.evaluate(exp).toDouble();
   }
 
-  Future<void> _saveTransaction() async {
+  // ── Save ───────────────────────────────────────────────────────────────────
+
+  Future<void> _save() async {
     if (_selectedAccountId == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please select an account')));
+      _snack('Please select an account');
       return;
     }
-
     if (_selectedCategory.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please select a category')));
+      _snack('Please select a category');
       return;
     }
-
     final amount = double.tryParse(_displayAmount);
     if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid amount')),
-      );
+      _snack('Enter a valid amount');
       return;
     }
 
-    // Check if this transaction will result in negative balance
-    if (_selectedType == 'expense' && _selectedAccountId != null) {
-      final selectedAccount = _accounts.firstWhere(
-        (account) => account.id == _selectedAccountId,
-      );
-
-      if (selectedAccount.balance < amount) {
-        final shouldProceed = await _showNegativeBalanceWarning(
-          selectedAccount.name,
-          selectedAccount.balance,
-          amount,
-        );
-
-        if (!shouldProceed) {
-          return; // User cancelled
-        }
+    if (_selectedType == 'expense') {
+      final acc = _accounts.firstWhere((a) => a.id == _selectedAccountId);
+      if (acc.balance < amount) {
+        final ok = await _confirmNegativeBalance(acc.name, acc.balance, amount);
+        if (!ok) return;
       }
     }
 
-    final transaction = Transaction(
+    final txn = Transaction(
       id: widget.editingTransaction?.id ?? const Uuid().v4(),
       title: _selectedCategory,
       amount: amount,
       date: DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-        _selectedTime.hour,
-        _selectedTime.minute,
+        _selectedDate.year, _selectedDate.month, _selectedDate.day,
+        _selectedTime.hour, _selectedTime.minute,
       ),
       category: _selectedCategory,
       type: _selectedType,
@@ -352,1096 +288,114 @@ class _CalculatorTransactionScreenState
 
     // ignore: use_build_context_synchronously
     final appState = Provider.of<OptimizedAppState>(context, listen: false);
-    // ignore: use_build_context_synchronously
-    final messenger = ScaffoldMessenger.of(context);
 
     if (widget.editingTransaction != null) {
-      await appState.updateTransactionOptimistically(transaction);
-      if (mounted) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Transaction updated successfully')),
-        );
-      }
+      await appState.updateTransactionOptimistically(txn);
     } else {
-      await appState.addTransactionOptimistically(transaction);
-      if (mounted) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Transaction added successfully')),
-        );
-      }
+      await appState.addTransactionOptimistically(txn);
     }
 
-    if (mounted) {
-      Navigator.pop(context, true);
-    }
+    if (mounted) Navigator.pop(context, txn);
   }
 
-  Future<bool> _showNegativeBalanceWarning(
-    String accountName,
-    double currentBalance,
-    double expenseAmount,
-  ) async {
-    final newBalance = currentBalance - expenseAmount;
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: AppText.bodyStyle(Colors.white)),
+        backgroundColor: context.cInk,
+      ),
+    );
+  }
 
+  Future<bool> _confirmNegativeBalance(
+    String name, double balance, double amount,
+  ) async {
     return await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (_) => AlertDialog(
+            backgroundColor: context.cCard,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AppRadius.r16),
+              side: BorderSide(color: context.cBorder, width: 1),
             ),
-            title: Row(
-              children: [
-                Icon(Icons.warning, color: Colors.orange, size: 28),
-                const SizedBox(width: 12),
-                const Text('Low Balance Warning'),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'This transaction will result in a negative balance for "$accountName".',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.orange.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Current Balance: ',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                          Text(
-                            '₹${NumberFormat.currency(symbol: '').format(currentBalance)}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: currentBalance >= 0
-                                  ? Colors.green
-                                  : Colors.red,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Text(
-                            'Expense Amount: ',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                          Text(
-                            '₹${NumberFormat.currency(symbol: '').format(expenseAmount)}',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.red,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Text(
-                            'New Balance: ',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                          Text(
-                            '₹${NumberFormat.currency(symbol: '').format(newBalance)}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.red,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Do you want to proceed with this transaction?',
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-              ],
+            title: Text('Low balance', style: AppText.title(context.cInk)),
+            content: Text(
+              '"$name" will go negative (${context.watch<CurrencyProvider>().currencySymbol}${(balance - amount).toStringAsFixed(0)}). Continue?',
+              style: AppText.bodyStyle(context.cInk2),
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Proceed'),
-              ),
+              AppButtonGhost(label: 'Cancel',  onTap: () => Navigator.pop(context, false)),
+              AppButtonGhost(label: 'Proceed', onTap: () => Navigator.pop(context, true)),
             ],
           ),
         ) ??
         false;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
-        foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
-        leading: TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(
-            'CANCEL',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.error,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        title: Text(
-          widget.editingTransaction != null
-              ? 'Edit Transaction'
-              : 'Add Transaction',
-        ),
-        centerTitle: true,
-        actions: [
-          TextButton(
-            onPressed: _saveTransaction,
-            child: Text(
-              'SAVE',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Transaction type selector
-          Container(
-            margin: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Theme.of(context).dividerColor),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedType = 'income';
-                        if (_incomeCategories.isNotEmpty) {
-                          _selectedCategory = _incomeCategories.first.name;
-                        }
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _selectedType == 'income'
-                            ? Theme.of(context).colorScheme.primary
-                            : null,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'INCOME',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: _selectedType == 'income'
-                              ? Colors.white
-                              : Theme.of(context).colorScheme.onSurface,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedType = 'expense';
-                        if (_expenseCategories.isNotEmpty) {
-                          _selectedCategory = _expenseCategories.first.name;
-                        }
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _selectedType == 'expense'
-                            ? Theme.of(context).colorScheme.primary
-                            : null,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'EXPENSE',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: _selectedType == 'expense'
-                              ? Colors.white
-                              : Theme.of(context).colorScheme.onSurface,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedType = 'transfer';
-                        if (_transferCategories.isNotEmpty) {
-                          _selectedCategory = _transferCategories.first.name;
-                        }
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _selectedType == 'transfer'
-                            ? Theme.of(context).colorScheme.primary
-                            : null,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'TRANSFER',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: _selectedType == 'transfer'
-                              ? Colors.white
-                              : Theme.of(context).colorScheme.onSurface,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+  // ── Date / time ────────────────────────────────────────────────────────────
 
-          // Account and Category selection
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildSelectionButton(
-                    _selectedType == 'transfer' ? 'From Account' : 'Account',
-                    _selectedAccountId != null
-                        ? _accounts
-                                  .where((a) => a.id == _selectedAccountId)
-                                  .firstOrNull
-                                  ?.name ??
-                              'Select Account'
-                        : 'Select Account',
-                    Icons.account_balance_wallet,
-                    () => _showAccountSelector(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (_selectedType == 'transfer')
-                  Expanded(
-                    child: _buildSelectionButton(
-                      'To Account',
-                      _selectedToAccountId != null
-                          ? _accounts
-                                    .where((a) => a.id == _selectedToAccountId)
-                                    .firstOrNull
-                                    ?.name ??
-                                'Select Account'
-                          : 'Select Account',
-                      Icons.account_balance_wallet,
-                      () => _showToAccountSelector(),
-                    ),
-                  )
-                else
-                  Expanded(
-                    child: _buildSelectionButton(
-                      'Category',
-                      _selectedCategory,
-                      _getCategoryIcon(_selectedCategory),
-                      () => _showCategorySelector(),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          // Notes field
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Theme.of(context).dividerColor),
-            ),
-            child: TextField(
-              controller: _notesController,
-              decoration: const InputDecoration(
-                hintText: 'Add notes',
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-              ),
-              maxLines: 2,
-              minLines: 1,
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          // Calculator Display with History
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Theme.of(context).dividerColor),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Calculation History
-                if (_calculationHistory.isNotEmpty) ...[
-                  SizedBox(
-                    height: 60,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _calculationHistory.length,
-                      itemBuilder: (context, index) {
-                        final historyItem =
-                            _calculationHistory[_calculationHistory.length -
-                                1 -
-                                index];
-                        return Container(
-                          margin: const EdgeInsets.only(right: 8),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surface,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: Theme.of(context).dividerColor,
-                            ),
-                          ),
-                          child: Text(
-                            historyItem,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-
-                // Current Expression and Result
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (_calculationString.isNotEmpty) ...[
-                            Text(
-                              _calculationString,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurface.withValues(alpha: 0.6),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                          ],
-                          Text(
-                            '₹$_displayAmount',
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        IconButton(
-                          onPressed: _onClearPressed,
-                          icon: const Icon(Icons.clear),
-                          iconSize: 20,
-                          padding: EdgeInsets.zero,
-                          tooltip: 'Clear',
-                        ),
-                        IconButton(
-                          onPressed: _onBackspacePressed,
-                          icon: const Icon(Icons.backspace_outlined),
-                          iconSize: 20,
-                          padding: EdgeInsets.zero,
-                          tooltip: 'Backspace',
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-
-                // Running Total
-                if (_calculationString.isNotEmpty &&
-                    _runningTotal != '0' &&
-                    _runningTotal != 'Error') ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      '= ₹$_runningTotal',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          // Calculator
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.all(4),
-              child: _buildCalculator(),
-            ),
-          ),
-
-          // Date and Time
-          Container(
-            margin: const EdgeInsets.all(8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: _selectDate,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: Theme.of(context).dividerColor,
-                        ),
-                      ),
-                      child: Text(
-                        DateFormat('MMM dd, yyyy').format(_selectedDate),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const Text('|', style: TextStyle(fontSize: 14)),
-                Expanded(
-                  child: common_widgets.SimpleTimeInput(
-                    initialTime: _selectedTime,
-                    onTimeChanged: (time) {
-                      setState(() {
-                        _selectedTime = time;
-                      });
-                    },
-                    label: null,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(1800),
+      lastDate: DateTime.now().add(const Duration(days: 36500)),
     );
+    if (picked != null) setState(() => _selectedDate = picked);
   }
 
-  Widget _buildSelectionButton(
-    String label,
-    String value,
-    IconData icon,
-    VoidCallback onTap,
-  ) {
-    final categoryColor = _getCategoryColor(value);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: label == 'Category'
-                ? categoryColor.withValues(alpha: 0.1)
-                : Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: label == 'Category'
-                  ? categoryColor.withValues(alpha: 0.3)
-                  : Theme.of(context).dividerColor,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    icon,
-                    size: 20,
-                    color: label == 'Category'
-                        ? categoryColor
-                        : Colors.grey[600],
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: label == 'Category'
-                            ? categoryColor
-                            : Colors.black87,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (value != 'Select Account' && value != 'Select Category')
-                    Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
     );
+    if (picked != null) setState(() => _selectedTime = picked);
   }
 
-  Color _getCategoryColor(String categoryName) {
-    final allCategories = [
-      ..._expenseCategories,
-      ..._incomeCategories,
-      ..._transferCategories,
-    ];
-    final category = allCategories.firstWhere(
-      (c) => c.name == categoryName,
-      orElse: () => Category(
-        id: '',
-        name: '',
-        type: '',
-        icon: 'category',
-        color: '#808080',
-        createdAt: DateTime.now(),
-      ),
-    );
-    return CategoryService.getColorFromHex(category.color);
-  }
+  // ── Selectors ──────────────────────────────────────────────────────────────
 
-  Widget _buildCalculator() {
-    return GridView.count(
-      crossAxisCount: 4,
-      crossAxisSpacing: 8,
-      mainAxisSpacing: 8,
-      childAspectRatio: 1.2,
-      children: [
-        _buildCalculatorButton(
-          'C',
-          color: Colors.orange,
-          onPressed: _onClearPressed,
-        ),
-        _buildCalculatorButton('7', onPressed: () => _onNumberPressed('7')),
-        _buildCalculatorButton('8', onPressed: () => _onNumberPressed('8')),
-        _buildCalculatorButton('9', onPressed: () => _onNumberPressed('9')),
-
-        _buildCalculatorButton(
-          '+',
-          color: Theme.of(context).colorScheme.primary,
-          onPressed: () => _onOperatorPressed('+'),
-        ),
-        _buildCalculatorButton('4', onPressed: () => _onNumberPressed('4')),
-        _buildCalculatorButton('5', onPressed: () => _onNumberPressed('5')),
-        _buildCalculatorButton('6', onPressed: () => _onNumberPressed('6')),
-
-        _buildCalculatorButton(
-          '-',
-          color: Theme.of(context).colorScheme.primary,
-          onPressed: () => _onOperatorPressed('-'),
-        ),
-        _buildCalculatorButton('1', onPressed: () => _onNumberPressed('1')),
-        _buildCalculatorButton('2', onPressed: () => _onNumberPressed('2')),
-        _buildCalculatorButton('3', onPressed: () => _onNumberPressed('3')),
-
-        _buildCalculatorButton(
-          '×',
-          color: Theme.of(context).colorScheme.primary,
-          onPressed: () => _onOperatorPressed('×'),
-        ),
-
-        _buildCalculatorButton(
-          '=',
-          color: Theme.of(context).colorScheme.primary,
-          onPressed: _onEqualsPressed,
-        ),
-        _buildCalculatorButton('0', onPressed: () => _onNumberPressed('0')),
-        _buildCalculatorButton('.', onPressed: _onDecimalPressed),
-        _buildCalculatorButton(
-          '÷',
-          color: Theme.of(context).colorScheme.primary,
-          onPressed: () => _onOperatorPressed('÷'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCalculatorButton(
-    String text, {
-    Color? color,
-    required VoidCallback onPressed,
-  }) {
-    return ElevatedButton(
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color ?? Theme.of(context).cardColor,
-        foregroundColor: color != null
-            ? Colors.white
-            : Theme.of(context).colorScheme.onSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        elevation: 0,
-        padding: const EdgeInsets.all(5),
-        minimumSize: const Size(0, 0),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-
-  void _showAccountSelector() {
-    // Sort accounts: positive balance first, then by most used
-    final sortedAccounts = List<Account>.from(_accounts);
-    sortedAccounts.sort((a, b) {
-      // First priority: positive balance over negative
-      if (a.balance >= 0 && b.balance < 0) return -1;
-      if (a.balance < 0 && b.balance >= 0) return 1;
-
-      // Second priority: most used accounts (you can implement usage tracking later)
-      // For now, prioritize cash and bank accounts
-      final aPriority = _getAccountPriority(a.type);
-      final bPriority = _getAccountPriority(b.type);
-      if (aPriority != bPriority) return bPriority.compareTo(aPriority);
-
-      // Third priority: balance amount (higher positive first)
-      return b.balance.compareTo(a.balance);
-    });
+  void _showAccountSelector({bool toAccount = false}) {
+    final list = toAccount
+        ? _accounts.where((a) => a.id != _selectedAccountId).toList()
+        : List<Account>.from(_accounts);
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: Theme.of(context).cardColor,
       isScrollControlled: true,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.7,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _selectedType == 'transfer'
-                  ? 'Select From Account'
-                  : 'Select Account',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView(
-                shrinkWrap: true,
-                children: sortedAccounts
-                    .map((account) => _buildAccountSelectionTile(account))
-                    .toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAccountSelectionTile(
-    Account account, {
-    bool isToAccount = false,
-  }) {
-    final isNegativeBalance = account.balance < 0;
-    final isSelected = isToAccount
-        ? _selectedToAccountId == account.id
-        : _selectedAccountId == account.id;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: isSelected
-              ? Theme.of(context).colorScheme.primary
-              : (isNegativeBalance
-                    ? Colors.red.withValues(alpha: 0.3)
-                    : Colors.transparent),
-          width: isSelected ? 2 : 1,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        color: isSelected
-            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
-            : (isNegativeBalance ? Colors.red.withValues(alpha: 0.05) : null),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: isNegativeBalance
-                ? Colors.red.withValues(alpha: 0.1)
-                : Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(
-            _getAccountIcon(account.type),
-            color: isNegativeBalance
-                ? Colors.red
-                : Theme.of(context).colorScheme.primary,
-            size: 24,
-          ),
-        ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                account.name,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: isNegativeBalance ? Colors.red[700] : null,
-                ),
-              ),
-            ),
-            if (isSelected)
-              Icon(
-                Icons.check_circle,
-                color: Theme.of(context).colorScheme.primary,
-                size: 20,
-              ),
-          ],
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isNegativeBalance
-                        ? Colors.red.withValues(alpha: 0.1)
-                        : Colors.green.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    account.type.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: isNegativeBalance ? Colors.red : Colors.green,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (isNegativeBalance)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.warning, size: 12, color: Colors.red),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Low Balance',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.red,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Balance: ₹${NumberFormat.currency(symbol: '').format(account.balance)}',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: isNegativeBalance ? Colors.red : Colors.grey[600],
-              ),
-            ),
-            if (isNegativeBalance &&
-                _selectedType == 'expense' &&
-                !isToAccount) ...[
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.orange.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 16,
-                      color: Colors.orange[700],
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Adding expense will increase negative balance',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.orange[700],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            if (isToAccount && _selectedType == 'transfer') ...[
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.swap_horiz, size: 16, color: Colors.blue[700]),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Money will be transferred to this account',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue[700],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-        onTap: () {
-          setState(() {
-            if (isToAccount) {
-              _selectedToAccountId = account.id;
-            } else {
-              _selectedAccountId = account.id;
-            }
-          });
-          Navigator.pop(context);
-        },
-      ),
-    );
-  }
-
-  IconData _getAccountIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'cash':
-        return Icons.money;
-      case 'bank':
-      case 'savings':
-        return Icons.account_balance;
-      case 'credit':
-        return Icons.credit_card;
-      case 'investment':
-        return Icons.trending_up;
-      default:
-        return Icons.account_balance_wallet;
-    }
-  }
-
-  int _getAccountPriority(String type) {
-    switch (type.toLowerCase()) {
-      case 'cash':
-        return 5; // Highest priority
-      case 'bank':
-        return 4;
-      case 'savings':
-        return 3;
-      case 'credit':
-        return 2;
-      case 'investment':
-        return 1;
-      default:
-        return 0;
-    }
-  }
-
-  void _showToAccountSelector() {
-    // Filter out the currently selected "from" account and sort remaining accounts
-    final availableAccounts = _accounts
-        .where((account) => account.id != _selectedAccountId)
-        .toList();
-
-    // Sort accounts: positive balance first, then by priority
-    availableAccounts.sort((a, b) {
-      if (a.balance >= 0 && b.balance < 0) return -1;
-      if (a.balance < 0 && b.balance >= 0) return 1;
-
-      final aPriority = _getAccountPriority(a.type);
-      final bPriority = _getAccountPriority(b.type);
-      if (aPriority != bPriority) return bPriority.compareTo(aPriority);
-
-      return b.balance.compareTo(a.balance);
-    });
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Theme.of(context).cardColor,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.7,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Select To Account',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView(
-                shrinkWrap: true,
-                children: availableAccounts
-                    .map(
-                      (account) => _buildAccountSelectionTile(
-                        account,
-                        isToAccount: true,
-                      ),
-                    )
-                    .toList(),
-              ),
-            ),
-          ],
+      backgroundColor: Colors.transparent,
+      builder: (_) => _SelectSheet(
+        title: toAccount ? 'To Account' : 'Account',
+        child: ListView(
+          shrinkWrap: true,
+          children: list.map((acc) {
+            final sel = toAccount
+                ? acc.id == _selectedToAccountId
+                : acc.id == _selectedAccountId;
+            return _SelectTile(
+              leading: Text(_accountEmoji(acc.type),
+                  style: const TextStyle(fontSize: 18)),
+              title: acc.name,
+              subtitle: acc.type,
+              selected: sel,
+              onTap: () {
+                setState(() {
+                  if (toAccount) {
+                    _selectedToAccountId = acc.id;
+                  } else {
+                    _selectedAccountId = acc.id;
+                  }
+                });
+                Navigator.pop(context);
+              },
+            );
+          }).toList(),
         ),
       ),
     );
   }
 
   void _showCategorySelector() {
-    final categories = _selectedType == 'expense'
+    final cats = _selectedType == 'expense'
         ? _expenseCategories
         : _selectedType == 'income'
             ? _incomeCategories
@@ -1449,59 +403,413 @@ class _CalculatorTransactionScreenState
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: Theme.of(context).cardColor,
       isScrollControlled: true,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.7,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _SelectSheet(
+        title: 'Category',
+        child: Wrap(
+          spacing: AppSpacing.s8,
+          runSpacing: AppSpacing.s8,
+          children: cats.map((cat) {
+            final sel = cat.name == _selectedCategory;
+            final color = CategoryService.getColorFromHex(cat.color);
+            return GestureDetector(
+              onTap: () {
+                setState(() => _selectedCategory = cat.name);
+                Navigator.pop(context);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.s12, vertical: AppSpacing.s8,
+                ),
+                decoration: BoxDecoration(
+                  color: sel
+                      ? color.withValues(alpha: 0.15)
+                      : context.cSurface,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  border: Border.all(
+                    color: sel ? color : context.cBorder,
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(CategoryService.getIconData(cat.icon),
+                        size: 14, color: sel ? color : context.cInk3),
+                    const SizedBox(width: 6),
+                    Text(
+                      cat.name,
+                      style: AppText.mono(
+                        AppText.tinier + 1,
+                        sel ? AppText.semibold : AppText.regular,
+                        sel ? color : context.cInk3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
         ),
+      ),
+    );
+  }
+
+  String _accountEmoji(String type) {
+    const map = {
+      'cash': '💵', 'bank': '🏦', 'savings': '🏧',
+      'credit': '💳', 'debit': '💳', 'investment': '📈',
+      'digital': '📱',
+    };
+    return map[type.toLowerCase()] ?? '💰';
+  }
+
+  IconData _categoryIcon(String name) {
+    final all = [..._expenseCategories, ..._incomeCategories, ..._transferCategories];
+    final cat = all.firstWhere(
+      (c) => c.name == name,
+      orElse: () => Category(
+        id: '', name: '', type: '', icon: 'category',
+        color: '#808080', createdAt: DateTime.now(),
+      ),
+    );
+    return CategoryService.getIconData(cat.icon);
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    final currency = context.watch<CurrencyProvider>().currencySymbol;
+    final typeColor = _selectedType == 'income'
+        ? AppColors.ok
+        : _selectedType == 'expense'
+            ? AppColors.danger
+            : context.cAccent;
+
+    return Scaffold(
+      backgroundColor: context.cBg,
+      body: SafeArea(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Select Category',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            // Top bar
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.s4, AppSpacing.s8, AppSpacing.s4, 0,
+              ),
+              child: Row(
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'Cancel',
+                      style: AppText.bodyStyle(context.cInk3).copyWith(
+                        fontWeight: AppText.medium, fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        widget.editingTransaction != null
+                            ? 'Edit Transaction'
+                            : 'Add Transaction',
+                        style: AppText.bodyStyle(context.cInk).copyWith(
+                          fontWeight: AppText.semibold, fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _save,
+                    child: Text(
+                      'Save',
+                      style: AppText.bodyStyle(context.cAccent).copyWith(
+                        fontWeight: AppText.bold, fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView(
-                shrinkWrap: true,
-                children: categories
-                    .map(
-                      (category) => ListTile(
-                        leading: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: CategoryService.getColorFromHex(category.color)
-                                .withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            CategoryService.getIconData(category.icon),
-                            color: CategoryService.getColorFromHex(category.color),
-                            size: 20,
-                          ),
-                        ),
-                        title: Text(
-                          category.name,
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                        trailing: _selectedCategory == category.name
-                            ? Icon(Icons.check,
-                                color: CategoryService.getColorFromHex(
-                                    category.color))
-                            : null,
+
+            // Type selector
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.s16, AppSpacing.s8, AppSpacing.s16, 0,
+              ),
+              child: Container(
+                height: 36,
+                decoration: BoxDecoration(
+                  color: context.cSurface,
+                  borderRadius: BorderRadius.circular(AppRadius.r10),
+                  border: Border.all(color: context.cBorder, width: 1),
+                ),
+                child: Row(
+                  children: ['expense', 'income', 'transfer'].map((t) {
+                    final sel = t == _selectedType;
+                    return Expanded(
+                      child: GestureDetector(
                         onTap: () {
+                          HapticFeedback.selectionClick();
                           setState(() {
-                            _selectedCategory = category.name;
+                            _selectedType = t;
+                            final cats = t == 'expense'
+                                ? _expenseCategories
+                                : t == 'income'
+                                    ? _incomeCategories
+                                    : _transferCategories;
+                            if (cats.isNotEmpty) _selectedCategory = cats.first.name;
                           });
-                          Navigator.pop(context);
                         },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          decoration: BoxDecoration(
+                            color: sel
+                                ? (t == 'income' ? AppColors.ok : t == 'expense' ? AppColors.danger : context.cAccent)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(AppRadius.r8),
+                          ),
+                          child: Center(
+                            child: Text(
+                              t[0].toUpperCase() + t.substring(1),
+                              style: AppText.mono(
+                                AppText.tinier + 1,
+                                sel ? AppText.bold : AppText.medium,
+                                sel ? Colors.white : context.cInk3,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+
+            // Account + Category row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.s16, AppSpacing.s8, AppSpacing.s16, 0,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _SelectorChip(
+                      label: _selectedType == 'transfer' ? 'From' : 'Account',
+                      value: _accounts
+                              .where((a) => a.id == _selectedAccountId)
+                              .firstOrNull
+                              ?.name ??
+                          'Select',
+                      icon: Icons.account_balance_wallet_outlined,
+                      onTap: () => _showAccountSelector(),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.s8),
+                  if (_selectedType == 'transfer')
+                    Expanded(
+                      child: _SelectorChip(
+                        label: 'To',
+                        value: _accounts
+                                .where((a) => a.id == _selectedToAccountId)
+                                .firstOrNull
+                                ?.name ??
+                            'Select',
+                        icon: Icons.account_balance_outlined,
+                        onTap: () => _showAccountSelector(toAccount: true),
                       ),
                     )
-                    .toList(),
+                  else
+                    Expanded(
+                      child: _SelectorChip(
+                        label: 'Category',
+                        value: _selectedCategory.isEmpty ? 'Select' : _selectedCategory,
+                        icon: _selectedCategory.isEmpty
+                            ? Icons.grid_view_rounded
+                            : _categoryIcon(_selectedCategory),
+                        onTap: _showCategorySelector,
+                        color: typeColor,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Notes
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.s16, AppSpacing.s6, AppSpacing.s16, 0,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: context.cCard,
+                  borderRadius: BorderRadius.circular(AppRadius.r10),
+                  border: Border.all(color: context.cBorder, width: 1),
+                ),
+                child: TextField(
+                  controller: _notesController,
+                  style: AppText.bodyStyle(context.cInk).copyWith(fontSize: 12),
+                  maxLines: 1,
+                  decoration: InputDecoration(
+                    hintText: 'Add a note…',
+                    hintStyle: AppText.bodyStyle(context.cInk3).copyWith(fontSize: 12),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.s12, vertical: AppSpacing.s8,
+                    ),
+                    prefixIcon: Icon(Icons.notes_outlined,
+                        size: 14, color: context.cInk3),
+                    prefixIconConstraints: const BoxConstraints(
+                      minWidth: 32, minHeight: 0,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // Display
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.s16, AppSpacing.s6, AppSpacing.s16, 0,
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.s14, vertical: AppSpacing.s10,
+                ),
+                decoration: BoxDecoration(
+                  color: context.cCard,
+                  borderRadius: BorderRadius.circular(AppRadius.r10),
+                  border: Border.all(color: context.cBorder, width: 1),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_calculationString.isNotEmpty &&
+                              _calculationString != _displayAmount) ...[
+                            Text(
+                              _calculationString,
+                              style: AppText.monoCaption(context.cInk3),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                          ],
+                          Text(
+                            '$currency$_displayAmount',
+                            style: AppText.mono(28, AppText.semibold, typeColor),
+                          ),
+                          if (_runningTotal != '0' &&
+                              _runningTotal != _displayAmount &&
+                              _calculationString != _displayAmount) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              '= $currency$_runningTotal',
+                              style: AppText.monoCaption(context.cInk3),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    Column(
+                      children: [
+                        _IconBtn(
+                          icon: Icons.backspace_outlined,
+                          onTap: _onBackspace,
+                          color: context.cInk3,
+                        ),
+                        const SizedBox(height: 4),
+                        _IconBtn(
+                          icon: Icons.clear,
+                          onTap: _onClear,
+                          color: context.cInk3,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Date + Time
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.s16, AppSpacing.s6, AppSpacing.s16, 0,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: _pickDate,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.s12, vertical: AppSpacing.s8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: context.cCard,
+                          borderRadius: BorderRadius.circular(AppRadius.r8),
+                          border: Border.all(color: context.cBorder, width: 1),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.calendar_today_outlined,
+                                size: 12, color: context.cInk3),
+                            const SizedBox(width: 4),
+                            Text(
+                              DateFormat('d MMM y').format(_selectedDate),
+                              style: AppText.mono(10, AppText.medium, context.cInk2),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.s8),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: _pickTime,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.s12, vertical: AppSpacing.s8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: context.cCard,
+                          borderRadius: BorderRadius.circular(AppRadius.r8),
+                          border: Border.all(color: context.cBorder, width: 1),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.access_time_outlined,
+                                size: 12, color: context.cInk3),
+                            const SizedBox(width: 4),
+                            Text(
+                              _selectedTime.format(context),
+                              style: AppText.mono(10, AppText.medium, context.cInk2),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Calculator grid
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.s12, AppSpacing.s6, AppSpacing.s12, AppSpacing.s8,
+                ),
+                child: _buildCalcGrid(typeColor),
               ),
             ),
           ],
@@ -1510,24 +818,271 @@ class _CalculatorTransactionScreenState
     );
   }
 
-  IconData _getCategoryIcon(String categoryName) {
-    final allCategories = [
-      ..._expenseCategories,
-      ..._incomeCategories,
-      ..._transferCategories
+  Widget _buildCalcGrid(Color accentColor) {
+    final buttons = [
+      ['7', '8', '9', '+'],
+      ['4', '5', '6', '-'],
+      ['1', '2', '3', '×'],
+      ['.', '0', '=', '÷'],
     ];
-    final category = allCategories.firstWhere(
-      (c) => c.name == categoryName,
-      orElse: () => Category(
-          id: '', // Default value
-          name: '', // Default value
-          type: '', // Default value
-          icon: 'category', // Default value
-          color: '#808080', // Default value
-          createdAt: DateTime.now()),
-    );
-    return CategoryService.getIconData(category.icon);
-  }
 
-  // duplicate removed (defined earlier)
+    return Column(
+      children: buttons.map((row) {
+        return Expanded(
+          child: Row(
+            children: row.map((key) {
+              final isOp = ['+', '-', '×', '÷'].contains(key);
+              final isEq = key == '=';
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(3),
+                  child: _CalcKey(
+                    label: key,
+                    bg: isEq
+                        ? accentColor
+                        : isOp
+                            ? context.cSurface
+                            : context.cCard,
+                    fg: isEq
+                        ? Colors.white
+                        : isOp
+                            ? accentColor
+                            : context.cInk,
+                    borderColor: isEq ? Colors.transparent : context.cBorder,
+                    onTap: () {
+                      if (isEq) {
+                        _onEquals();
+                      } else if (isOp) {
+                        _onOperator(key);
+                      } else if (key == '.') {
+                        _onDecimal();
+                      } else {
+                        _onNumber(key);
+                      }
+                    },
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+// ── Widgets ────────────────────────────────────────────────────────────────────
+
+class _SelectorChip extends StatelessWidget {
+  const _SelectorChip({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+    this.color,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final VoidCallback onTap;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = color ?? context.cInk2;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.s12, vertical: AppSpacing.s8,
+        ),
+        decoration: BoxDecoration(
+          color: context.cCard,
+          borderRadius: BorderRadius.circular(AppRadius.r10),
+          border: Border.all(color: context.cBorder, width: 1),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 14, color: fg),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: AppText.mono(8, AppText.regular, context.cInk3)),
+                  Text(
+                    value,
+                    style: AppText.mono(10, AppText.semibold, fg),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.expand_more, size: 14, color: context.cInk3),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CalcKey extends StatelessWidget {
+  const _CalcKey({
+    required this.label,
+    required this.bg,
+    required this.fg,
+    required this.borderColor,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color bg;
+  final Color fg;
+  final Color borderColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(AppRadius.r8),
+          border: Border.all(color: borderColor, width: 1),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: AppText.mono(18, AppText.semibold, fg),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IconBtn extends StatelessWidget {
+  const _IconBtn({
+    required this.icon,
+    required this.onTap,
+    required this.color,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Icon(icon, size: 18, color: color),
+    );
+  }
+}
+
+class _SelectSheet extends StatelessWidget {
+  const _SelectSheet({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.65,
+      ),
+      decoration: BoxDecoration(
+        color: context.cCard,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppRadius.r16),
+        ),
+        border: Border.all(color: context.cBorder, width: 1),
+      ),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.s20, AppSpacing.s16, AppSpacing.s20, AppSpacing.s24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36, height: 3,
+              decoration: BoxDecoration(
+                color: context.cBorder,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.s14),
+          Text(title, style: AppText.title(context.cInk)),
+          const SizedBox(height: AppSpacing.s14),
+          Flexible(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+class _SelectTile extends StatelessWidget {
+  const _SelectTile({
+    required this.leading,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Widget leading;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: AppSpacing.s6),
+        padding: const EdgeInsets.all(AppSpacing.s12),
+        decoration: BoxDecoration(
+          color: selected
+              ? (context.isDark ? AppColors.accentBgDark : AppColors.accentBg)
+              : context.cSurface,
+          borderRadius: BorderRadius.circular(AppRadius.r10),
+          border: Border.all(
+            color: selected ? context.cAccent : context.cBorder,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            leading,
+            const SizedBox(width: AppSpacing.s12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: AppText.cardTitleStyle(context.cInk)),
+                  Text(subtitle,
+                      style: AppText.monoCaption(context.cInk3)),
+                ],
+              ),
+            ),
+            if (selected)
+              Icon(Icons.check, size: 14, color: context.cAccent),
+          ],
+        ),
+      ),
+    );
+  }
 }

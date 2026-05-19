@@ -1,1803 +1,714 @@
 import 'package:flutter/material.dart';
-import 'package:spendwise/screens/shared/custom_drawer.dart';
-import 'package:spendwise/models/budget.dart';
-import 'package:spendwise/models/overall_budget.dart';
-import 'package:spendwise/services/data_service.dart';
-import 'package:spendwise/services/category_service.dart';
-import 'package:spendwise/services/warning_preferences_service.dart';
-import 'package:spendwise/widgets/common/index.dart' as common_widgets;
-import 'package:spendwise/models/category.dart';
-import 'package:uuid/uuid.dart';
-import 'package:spendwise/models/transaction.dart';
-import 'package:spendwise/services/budget_service.dart';
-import 'package:spendwise/screens/financial/base_financial_screen.dart';
-import 'package:spendwise/core/performance_mixins.dart';
+import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:spendwise/core/design_system.dart';
+import 'package:spendwise/core/widgets/index.dart';
+import 'package:spendwise/models/budget.dart';
+import 'package:spendwise/models/transaction.dart';
+import 'package:spendwise/services/currency_provider.dart';
+import 'package:spendwise/services/optimized_data_service.dart';
 
-class BudgetsScreen extends BaseFinancialScreen {
-  const BudgetsScreen({super.key})
-    : super(
-        screenTitle: 'Budgets',
-        screenIcon: Icons.pie_chart,
-        primaryColor: Colors.blue,
-        floatingActionButtonTooltip: 'Add Category',
-      );
+class BudgetsScreen extends StatefulWidget {
+  const BudgetsScreen({super.key});
 
   @override
   State<BudgetsScreen> createState() => _BudgetsScreenState();
 }
 
-class _BudgetsScreenState extends State<BudgetsScreen>
-    with ValueNotifierMixin, EfficientListMixin, ScrollPerformanceMixin {
-  // ValueNotifiers for efficient state management
-  late final ValueNotifier<List<Budget>> _budgetsNotifier;
-  late final ValueNotifier<List<OverallBudget>> _overallBudgetsNotifier;
-  late final ValueNotifier<List<Transaction>> _transactionsNotifier;
-  late final ValueNotifier<DateTime> _selectedMonthNotifier;
-  late final ValueNotifier<double> _totalBudgetNotifier;
-  late final ValueNotifier<double> _overallBudgetLimitNotifier;
-  late final ValueNotifier<double> _totalSpentNotifier;
-  late final ValueNotifier<double> _totalIncomeNotifier;
-  late final ValueNotifier<double> _salaryIncomeNotifier;
-  late final ValueNotifier<double> _effectiveIncomeNotifier;
-  late final ValueNotifier<List<Map<String, dynamic>>> _budgetAlertsNotifier;
-  late final ValueNotifier<List<Map<String, dynamic>>>
-  _budgetRecommendationsNotifier;
-  late final ValueNotifier<bool> _isLoadingNotifier;
-
-  // Predefined categories with expanded icon options
-  final List<Map<String, dynamic>> _incomeCategories = [
-    {
-      'name': 'Salary',
-      'icon': Icons.account_balance_wallet,
-      'color': Colors.red[700]!,
-    },
-    {'name': 'Grants', 'icon': Icons.card_giftcard, 'color': Colors.teal},
-    {'name': 'Recovery', 'icon': Icons.refresh, 'color': Colors.green},
-    {'name': 'Other', 'icon': Icons.people, 'color': Colors.green},
-  ];
-
-  final List<Map<String, dynamic>> _expenseCategories = [
-    // Essential Categories - 15 total
-    {'name': 'Food & Dining', 'icon': Icons.restaurant, 'color': Colors.red},
-    {'name': 'Groceries', 'icon': Icons.shopping_cart, 'color': Colors.orange[600]!},
-    {'name': 'Restaurant', 'icon': Icons.restaurant_menu, 'color': Colors.red[600]!},
-    
-    {'name': 'Transportation', 'icon': Icons.directions_car, 'color': Colors.blue},
-    {'name': 'Fuel', 'icon': Icons.local_gas_station, 'color': Colors.blue[600]!},
-    {'name': 'Public Transport', 'icon': Icons.directions_bus, 'color': Colors.blue[500]!},
-    
-    {'name': 'Housing', 'icon': Icons.home, 'color': Colors.green},
-    {'name': 'Rent', 'icon': Icons.home_work, 'color': Colors.green[600]!},
-    {'name': 'Utilities', 'icon': Icons.electric_bolt, 'color': Colors.amber},
-    
-    {'name': 'Healthcare', 'icon': Icons.medical_services, 'color': Colors.orange},
-    {'name': 'Medicine', 'icon': Icons.medication, 'color': Colors.orange[600]!},
-    
-    {'name': 'Shopping', 'icon': Icons.shopping_bag, 'color': Colors.purple},
-    {'name': 'Clothing', 'icon': Icons.checkroom, 'color': Colors.orange},
-    {'name': 'Electronics', 'icon': Icons.devices, 'color': Colors.teal},
-    
-    {'name': 'Entertainment', 'icon': Icons.movie, 'color': Colors.pink},
-    {'name': 'Sports', 'icon': Icons.sports_soccer, 'color': Colors.green},
-    
-    {'name': 'Education', 'icon': Icons.school, 'color': Colors.indigo},
-    {'name': 'Books', 'icon': Icons.book, 'color': Colors.indigo[600]!},
-    
-    {'name': 'Personal Care', 'icon': Icons.content_cut, 'color': Colors.pink},
-    {'name': 'Salon', 'icon': Icons.face, 'color': Colors.pink[400]!},
-    
-    {'name': 'Business', 'icon': Icons.business, 'color': Colors.grey[700]!},
-    {'name': 'Office Supplies', 'icon': Icons.work, 'color': Colors.grey[600]!},
-    
-    {'name': 'Financial Services', 'icon': Icons.account_balance, 'color': Colors.green[700]!},
-    {'name': 'Banking', 'icon': Icons.account_balance, 'color': Colors.green[600]!},
-    {'name': 'Insurance', 'icon': Icons.security, 'color': Colors.green[500]!},
-    {'name': 'Taxes', 'icon': Icons.receipt_long, 'color': Colors.red[600]!},
-    
-    {'name': 'Technology', 'icon': Icons.computer, 'color': Colors.blue[600]!},
-    {'name': 'Software', 'icon': Icons.computer, 'color': Colors.blue[500]!},
-    {'name': 'Internet', 'icon': Icons.wifi, 'color': Colors.blue[400]!},
-    
-    {'name': 'Travel', 'icon': Icons.flight, 'color': Colors.blue[600]!},
-    {'name': 'Vacation', 'icon': Icons.beach_access, 'color': Colors.blue[500]!},
-    
-    {'name': 'Social & Gifts', 'icon': Icons.people, 'color': Colors.green},
-    {'name': 'Gifts', 'icon': Icons.card_giftcard, 'color': Colors.pink[400]!},
-    {'name': 'Charity', 'icon': Icons.volunteer_activism, 'color': Colors.green[500]!},
-    
-    {'name': 'Other', 'icon': Icons.circle, 'color': Colors.blue},
-  ];
+class _BudgetsScreenState extends State<BudgetsScreen> {
+  List<Budget> _budgets = [];
+  List<Transaction> _transactions = [];
+  bool _loading = true;
+  DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
 
   @override
   void initState() {
     super.initState();
-    _initializeNotifiers();
-    _loadData();
+    _load();
   }
 
-  void _initializeNotifiers() {
-    _budgetsNotifier = getNotifier('budgets', []);
-    _overallBudgetsNotifier = getNotifier('overallBudgets', []);
-    _transactionsNotifier = getNotifier('transactions', []);
-    _selectedMonthNotifier = getNotifier('selectedMonth', DateTime.now());
-    _totalBudgetNotifier = getNotifier('totalBudget', 0.0);
-    _overallBudgetLimitNotifier = getNotifier('overallBudgetLimit', 0.0);
-    _totalSpentNotifier = getNotifier('totalSpent', 0.0);
-    _totalIncomeNotifier = getNotifier('totalIncome', 0.0);
-    _salaryIncomeNotifier = getNotifier('salaryIncome', 0.0);
-    _effectiveIncomeNotifier = getNotifier('effectiveIncome', 0.0);
-    _budgetAlertsNotifier = getNotifier('budgetAlerts', []);
-    _budgetRecommendationsNotifier = getNotifier('budgetRecommendations', []);
-    _isLoadingNotifier = getNotifier('isLoading', false);
-  }
-
-  Future<void> _loadData() async {
-    _isLoadingNotifier.value = true;
-
-    if (!mounted) return;
-
+  Future<void> _load() async {
     try {
-      final budgets = await DataService.getBudgets();
-      final overallBudgets = await DataService.getOverallBudgets();
-      final transactions = await DataService.getTransactions();
-
+      final buds = await OptimizedDataService.getBudgets();
+      final txns = await OptimizedDataService.getTransactions();
       if (mounted) {
         setState(() {
-          _budgetsNotifier.value = budgets;
-          _overallBudgetsNotifier.value = overallBudgets;
-          _transactionsNotifier.value = transactions;
-          _calculateTotals();
+          _budgets      = buds;
+          _transactions = txns;
+          _loading      = false;
         });
       }
-
-      // Load budget alerts and recommendations
-      if (mounted) {
-        final alerts = await BudgetService.getBudgetAlerts();
-        final recommendations = await BudgetService.getBudgetRecommendations();
-
-        if (mounted) {
-          setState(() {
-            _budgetAlertsNotifier.value = alerts;
-            _budgetRecommendationsNotifier.value = recommendations;
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading budgets: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        _isLoadingNotifier.value = false;
-      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _calculateTotals() {
-    // Calculate budget and spent for selected month
-    final monthBudgets = _budgetsNotifier.value
-        .where(
-          (budget) =>
-              budget.startDate.year == _selectedMonthNotifier.value.year &&
-              budget.startDate.month == _selectedMonthNotifier.value.month,
-        )
-        .toList();
+  List<Budget> get _monthBudgets => _budgets.where((b) {
+    return b.startDate.year == _month.year &&
+           b.startDate.month == _month.month;
+  }).toList();
 
-    final totalBudget = monthBudgets.fold(
-      0.0,
-      (sum, budget) => sum + budget.limit,
-    );
+  double _spent(Budget b) => _transactions
+      .where((t) =>
+          t.type == 'expense' &&
+          t.category.toLowerCase() == b.category.toLowerCase() &&
+          t.date.month == _month.month &&
+          t.date.year == _month.year)
+      .fold(0.0, (s, t) => s + t.amount);
 
-    // Get overall budget for the month
-    final monthOverallBudgets = _overallBudgetsNotifier.value
-        .where(
-          (budget) =>
-              budget.startDate.year == _selectedMonthNotifier.value.year &&
-              budget.startDate.month == _selectedMonthNotifier.value.month &&
-              budget.isActive,
-        )
-        .toList();
+  double get _totalLimit  => _monthBudgets.fold(0.0, (s, b) => s + b.limit);
+  double get _totalSpent  => _monthBudgets.fold(0.0, (s, b) => s + _spent(b));
+  double get _totalPct    => _totalLimit > 0
+      ? (_totalSpent / _totalLimit).clamp(0.0, 1.0)
+      : 0.0;
 
-    double overallBudgetLimit = 0.0;
-    if (monthOverallBudgets.isNotEmpty) {
-      overallBudgetLimit = monthOverallBudgets.first.limit;
+  Color _barColor(double pct) {
+    if (pct >= 1.0) return AppColors.danger;
+    if (pct >= 0.8) return AppColors.warn;
+    return AppColors.ok;
+  }
+
+  String _fmt(double v, String currency) {
+    if (v >= 10000000) return '$currency${(v / 10000000).toStringAsFixed(1)}Cr';
+    if (v >= 100000)   return '$currency${(v / 100000).toStringAsFixed(1)}L';
+    return '$currency${NumberFormat('#,##,###').format(v.round())}';
+  }
+
+  void _prevMonth() => setState(() =>
+      _month = DateTime(_month.year, _month.month - 1));
+
+  void _nextMonth() {
+    final next = DateTime(_month.year, _month.month + 1);
+    if (!next.isAfter(DateTime.now())) {
+      setState(() => _month = next);
     }
-
-    final monthTransactions = _transactionsNotifier.value
-        .where(
-          (transaction) =>
-              transaction.date.year == _selectedMonthNotifier.value.year &&
-              transaction.date.month == _selectedMonthNotifier.value.month,
-        )
-        .toList();
-
-    final monthExpenses = monthTransactions
-        .where((transaction) => transaction.type == 'expense')
-        .toList();
-
-    final monthIncome = monthTransactions
-        .where((transaction) => transaction.type == 'income')
-        .toList();
-
-    final totalSpent = monthExpenses.fold(
-      0.0,
-      (sum, transaction) => sum + transaction.amount,
-    );
-
-    // Calculate income
-    double totalIncome = 0.0;
-    double salaryIncome = 0.0;
-
-    for (final transaction in monthIncome) {
-      totalIncome += transaction.amount;
-      if (transaction.category.toLowerCase() == 'salary') {
-        salaryIncome += transaction.amount;
-      }
-    }
-
-    // Use salary income if available, otherwise use total income
-    final effectiveIncome = salaryIncome > 0 ? salaryIncome : totalIncome;
-
-    _totalBudgetNotifier.value = totalBudget;
-    _overallBudgetLimitNotifier.value = overallBudgetLimit;
-    _totalSpentNotifier.value = totalSpent;
-    _totalIncomeNotifier.value = totalIncome;
-    _salaryIncomeNotifier.value = salaryIncome;
-    _effectiveIncomeNotifier.value = effectiveIncome;
   }
 
   @override
   Widget build(BuildContext context) {
+    final currency = context.watch<CurrencyProvider>().currencySymbol;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Budgets'),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
-      ),
-      drawer: const CustomDrawer(),
-      body: RefreshIndicator(
-        onRefresh: _loadData,
-        child: ValueListenableBuilder<bool>(
-          valueListenable: _isLoadingNotifier,
-          builder: (context, isLoading, child) {
-            if (isLoading) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            return SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Budget Overview Section
-                    _buildBudgetOverviewSection(),
-                    const SizedBox(height: 24),
-
-                    // Budget Summary Section
-                    _buildBudgetSummarySection(),
-                    const SizedBox(height: 24),
-
-                    // Budget Alerts Section
-                    if (_budgetAlertsNotifier.value.isNotEmpty) ...[
-                      _buildBudgetAlertsSection(),
-                      const SizedBox(height: 24),
-                    ],
-
-                    // Budget Recommendations Section
-                    if (_budgetRecommendationsNotifier.value.isNotEmpty) ...[
-                      _buildBudgetRecommendationsSection(),
-                      const SizedBox(height: 24),
-                    ],
-
-                    // Budget Insights Section
-                    _buildBudgetInsightsSection(),
-                    const SizedBox(height: 24),
-
-                    // Categories with Budgets Section
-                    _buildCategoriesWithBudgetsSection(),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddCategoryDialog,
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-
-  Widget _buildBudgetOverviewSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Flexible(
-              child: Text(
-                'Budget Overview',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  onPressed: () {
-                    setState(() {
-                      _selectedMonthNotifier.value = _selectedMonthNotifier.value.month == 1
-                          ? DateTime(_selectedMonthNotifier.value.year - 1, 12)
-                          : DateTime(_selectedMonthNotifier.value.year, _selectedMonthNotifier.value.month - 1);
-                    });
-                    _calculateTotals();
-                  },
-                  icon: const Icon(Icons.chevron_left),
-                ),
-                GestureDetector(
-                  onTap: _showMonthPicker,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Colors.blue.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.calendar_today,
-                          size: 18,
-                          color: Colors.blue[700],
+      backgroundColor: context.cBg,
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _load,
+          color: context.cAccent,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              // Header
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.s16, AppSpacing.s16, AppSpacing.s16, AppSpacing.s4,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Budgets', style: AppText.heading(context.cInk)),
+                            const SizedBox(height: AppSpacing.s2),
+                            Text(
+                              DateFormat('MMMM y').format(_month),
+                              style: AppText.monoCaption(context.cInk3),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          DateFormat(
-                            'MMMM yyyy',
-                          ).format(_selectedMonthNotifier.value),
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.blue[700],
+                      ),
+                      GestureDetector(
+                        onTap: () => _showBudgetSheet(context, currency),
+                        child: Container(
+                          width: 34, height: 34,
+                          decoration: BoxDecoration(
+                            color: context.cSurface,
+                            borderRadius: BorderRadius.circular(AppRadius.r8),
+                            border: Border.all(color: context.cBorder, width: 1),
+                          ),
+                          child: Icon(Icons.add, size: 16, color: context.cInk2),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Month navigator
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.s16, AppSpacing.s8, AppSpacing.s16, 0,
+                  ),
+                  child: Row(
+                    children: [
+                      _NavArrow(
+                        icon: Icons.chevron_left,
+                        onTap: _prevMonth,
+                      ),
+                      Expanded(
+                        child: Center(
+                          child: Text(
+                            DateFormat('MMMM yyyy').format(_month),
+                            style: AppText.bodyStyle(context.cInk).copyWith(
+                              fontWeight: AppText.semibold, fontSize: 12,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        Icon(Icons.arrow_drop_down, color: Colors.blue[700]),
+                      ),
+                      _NavArrow(
+                        icon: Icons.chevron_right,
+                        onTap: _nextMonth,
+                        disabled: DateTime(_month.year, _month.month + 1)
+                            .isAfter(DateTime.now()),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Overall summary card
+              if (_monthBudgets.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: AppCard(
+                    margin: const EdgeInsets.fromLTRB(
+                      AppSpacing.s16, AppSpacing.s12, AppSpacing.s16, 0,
+                    ),
+                    padding: const EdgeInsets.all(AppSpacing.s14),
+                    radius: AppRadius.r12,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Overall · ${DateFormat('MMMM').format(_month)}',
+                                style: AppText.bodyStyle(context.cInk).copyWith(
+                                  fontWeight: AppText.semibold, fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '${(_totalPct * 100).toStringAsFixed(0)}%',
+                              style: AppText.monoCaption(context.cInk3),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.s8),
+                        AppProgressBar(
+                          value: _totalPct,
+                          color: _barColor(_totalPct),
+                        ),
+                        const SizedBox(height: AppSpacing.s6),
+                        Text(
+                          '${_fmt(_totalSpent, currency)} spent · '
+                          '${_fmt(_totalLimit - _totalSpent, currency)} left',
+                          style: AppText.monoCaption(context.cInk3),
+                        ),
                       ],
                     ),
                   ),
                 ),
-                IconButton(
-                  onPressed: () {
-                    setState(() {
-                      _selectedMonthNotifier.value = _selectedMonthNotifier.value.month == 12
-                          ? DateTime(_selectedMonthNotifier.value.year + 1, 1)
-                          : DateTime(_selectedMonthNotifier.value.year, _selectedMonthNotifier.value.month + 1);
-                    });
-                    _calculateTotals();
-                  },
-                  icon: const Icon(Icons.chevron_right),
+
+              // Section
+              SliverToBoxAdapter(
+                child: SectionHeader(
+                  title: 'Categories',
+                  action: '',
+                  onAction: null,
                 ),
-                const SizedBox(width: 8),
-                // Today button
-                if (_selectedMonthNotifier.value.year != DateTime.now().year ||
-                    _selectedMonthNotifier.value.month != DateTime.now().month)
-                  Container(
+              ),
+
+              // Budget cards
+              if (_loading)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: 60),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  ),
+                )
+              else if (_monthBudgets.isEmpty)
+                SliverToBoxAdapter(
+                  child: AppEmptyState(
+                    title: 'No budgets for ${DateFormat('MMMM').format(_month)}',
+                    subtitle: 'Add one to track spending',
+                    icon: Icons.pie_chart_outline,
+                    ctaLabel: 'Add Budget',
+                    onCta: () => _showBudgetSheet(context, currency),
+                  ),
+                )
+              else
+                SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (ctx, i) {
+                      if (i >= _monthBudgets.length) return null;
+                      final b = _monthBudgets[i];
+                      final spent = _spent(b);
+                      final pct   = b.limit > 0
+                          ? (spent / b.limit).clamp(0.0, 1.0)
+                          : 0.0;
+                      return _BudgetCard(
+                        budget: b,
+                        spent: spent,
+                        pct: pct,
+                        currency: currency,
+                        barColor: _barColor(pct),
+                        fmt: _fmt,
+                        onEdit: () => _showBudgetSheet(context, currency, editing: b),
+                        onDelete: () => _confirmDelete(b),
+                      );
+                    },
+                    childCount: _monthBudgets.length,
+                  ),
+                ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 88)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showBudgetSheet(
+    BuildContext context,
+    String currency, {
+    Budget? editing,
+  }) async {
+    final nameCtrl  = TextEditingController(text: editing?.name ?? '');
+    final limitCtrl = TextEditingController(
+      text: editing != null ? editing.limit.toStringAsFixed(0) : '',
+    );
+    String category = editing?.category ?? 'food';
+
+    const categories = [
+      'food', 'transport', 'shopping', 'bills',
+      'entertainment', 'health', 'travel', 'education', 'other',
+    ];
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setS) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: context.cCard,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(AppRadius.r16),
+              ),
+              border: Border.all(color: context.cBorder, width: 1),
+            ),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.s20, AppSpacing.s20, AppSpacing.s20, AppSpacing.s24,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36, height: 3,
                     decoration: BoxDecoration(
-                      color: Colors.green.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Colors.green.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: TextButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _selectedMonthNotifier.value = DateTime(
-                            DateTime.now().year,
-                            DateTime.now().month,
-                            1,
-                          );
-                        });
-                        _calculateTotals();
-                      },
-                      icon: Icon(
-                        Icons.today,
-                        size: 16,
-                        color: Colors.green[700],
-                      ),
-                      label: Text(
-                        'Today',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.green[700],
-                        ),
-                      ),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        minimumSize: const Size(0, 0),
-                      ),
+                      color: context.cBorder,
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
+                ),
+                const SizedBox(height: AppSpacing.s16),
+                Text(
+                  editing == null ? 'New Budget' : 'Edit Budget',
+                  style: AppText.title(context.cInk),
+                ),
+                const SizedBox(height: AppSpacing.s16),
+
+                _SheetField(controller: nameCtrl, hint: 'Budget name', label: 'Name'),
+                const SizedBox(height: AppSpacing.s12),
+                _SheetField(
+                  controller: limitCtrl,
+                  hint: '0',
+                  label: 'Monthly Limit ($currency)',
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: AppSpacing.s14),
+
+                LabelText('Category'),
+                const SizedBox(height: AppSpacing.s8),
+                Wrap(
+                  spacing: AppSpacing.s6,
+                  runSpacing: AppSpacing.s6,
+                  children: categories.map((c) {
+                    final sel = c == category;
+                    return GestureDetector(
+                      onTap: () => setS(() => category = c),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.s10, vertical: AppSpacing.s6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: sel
+                              ? (context.isDark ? AppColors.accentBgDark : AppColors.accentBg)
+                              : context.cSurface,
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                          border: Border.all(
+                            color: sel ? context.cAccent : context.cBorder,
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          c[0].toUpperCase() + c.substring(1),
+                          style: AppText.mono(
+                            AppText.tinier + 1,
+                            sel ? AppText.semibold : AppText.regular,
+                            sel ? context.cAccent : context.cInk3,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: AppSpacing.s20),
+
+                AppButtonPrimary(
+                  label: editing == null ? 'Add Budget' : 'Save Changes',
+                  onTap: () async {
+                    final name  = nameCtrl.text.trim();
+                    final limit = double.tryParse(limitCtrl.text) ?? 0.0;
+                    if (name.isEmpty || limit <= 0) return;
+
+                    final start = DateTime(_month.year, _month.month);
+                    final end   = DateTime(_month.year, _month.month + 1, 0);
+
+                    if (editing == null) {
+                      final b = Budget(
+                        id: DateTime.now().millisecondsSinceEpoch.toString(),
+                        name: name,
+                        limit: limit,
+                        category: category,
+                        startDate: start,
+                        endDate: end,
+                      );
+                      await OptimizedDataService.addBudget(b);
+                    } else {
+                      await OptimizedDataService.updateBudget(
+                        editing.copyWith(
+                          name: name, limit: limit, category: category,
+                          startDate: start, endDate: end,
+                        ),
+                      );
+                    }
+
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      _load();
+                    }
+                  },
+                ),
               ],
             ),
-          ],
+          ),
         ),
-        const SizedBox(height: 12),
-
-        Row(
-          children: [
-            Expanded(
-              child: _buildBudgetMetricCard(
-                'CATEGORY BUDGETS',
-                _totalBudgetNotifier.value,
-                Colors.blue,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildBudgetMetricCard(
-                'OVERALL BUDGET',
-                _overallBudgetLimitNotifier.value,
-                Colors.green,
-                onTap: _overallBudgetLimitNotifier.value > 0
-                    ? _showEditOverallBudgetDialog
-                    : _showSetOverallBudgetDialog,
-                showSetButton: _overallBudgetLimitNotifier.value == 0,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildBudgetMetricCard(
-                'TOTAL SPENT',
-                _totalSpentNotifier.value,
-                Colors.red,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildBudgetMetricCard(
-                'MONTHLY INCOME',
-                _effectiveIncomeNotifier.value,
-                Colors.green,
-                showIncomeSource: true,
-                incomeSource: _salaryIncomeNotifier.value > 0
-                    ? 'Salary'
-                    : 'All Income',
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildBudgetMetricCard(
-                'REMAINING',
-                _effectiveIncomeNotifier.value - _totalSpentNotifier.value,
-                _effectiveIncomeNotifier.value - _totalSpentNotifier.value < 0
-                    ? Colors.red
-                    : Colors.green,
-                showRemainingStatus: true,
-                isOverIncome:
-                    _totalSpentNotifier.value > _effectiveIncomeNotifier.value,
-              ),
-            ),
-          ],
-        ),
-      ],
+      ),
     );
   }
 
-  Future<void> _showMonthPicker() async {
-    final DateTime? picked = await showDatePicker(
+  Future<void> _confirmDelete(Budget b) async {
+    final confirmed = await showDialog<bool>(
       context: context,
-      initialDate: _selectedMonthNotifier.value,
-      firstDate: DateTime(1800),
-      lastDate: DateTime.now().add(const Duration(days: 36500)),
-      initialDatePickerMode: DatePickerMode.year,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(
-              context,
-            ).colorScheme.copyWith(primary: Colors.blue),
-          ),
-          child: child!,
-        );
-      },
+      builder: (_) => AlertDialog(
+        backgroundColor: context.cCard,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.r16),
+          side: BorderSide(color: context.cBorder, width: 1),
+        ),
+        title: Text('Delete budget?', style: AppText.title(context.cInk)),
+        content: Text('This cannot be undone.', style: AppText.bodyStyle(context.cInk2)),
+        actions: [
+          AppButtonGhost(label: 'Cancel', onTap: () => Navigator.pop(context, false)),
+          AppButtonGhost(label: 'Delete', onTap: () => Navigator.pop(context, true), danger: true),
+        ],
+      ),
     );
-
-    if (picked != null) {
-      final newMonth = DateTime(picked.year, picked.month, 1);
-      if (newMonth != _selectedMonthNotifier.value) {
-        setState(() {
-          _selectedMonthNotifier.value = newMonth;
-        });
-        _calculateTotals();
-      }
+    if (confirmed == true) {
+      await OptimizedDataService.deleteBudget(b.id);
+      if (mounted) _load();
     }
   }
+}
 
-  Widget _buildBudgetMetricCard(
-    String title,
-    double amount,
-    Color color, {
-    Function()? onTap,
-    bool showSetButton = false,
-    bool showIncomeSource = false,
-    String? incomeSource,
-    bool showRemainingStatus = false,
-    bool isOverIncome = false,
-  }) {
+// ── Budget Card ────────────────────────────────────────────────────────────────
+
+class _BudgetCard extends StatelessWidget {
+  const _BudgetCard({
+    required this.budget,
+    required this.spent,
+    required this.pct,
+    required this.currency,
+    required this.barColor,
+    required this.fmt,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final Budget budget;
+  final double spent;
+  final double pct;
+  final String currency;
+  final Color barColor;
+  final String Function(double, String) fmt;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  String _emoji(String cat) {
+    const map = {
+      'food': '🍕', 'transport': '🚗', 'shopping': '🛒',
+      'bills': '📱', 'entertainment': '🎬', 'health': '💊',
+      'travel': '✈️', 'education': '📚',
+    };
+    return map[cat.toLowerCase()] ?? '💰';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final left = budget.limit - spent;
+    final over = left < 0;
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(
+        AppSpacing.s16, 0, AppSpacing.s16, AppSpacing.s8,
+      ),
+      padding: const EdgeInsets.all(AppSpacing.s14),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        color: context.cCard,
+        borderRadius: BorderRadius.circular(AppRadius.r12),
+        border: Border.all(
+          color: over ? AppColors.danger.withValues(alpha: 0.3) : context.cBorder,
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 12,
-              color: color,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            NumberFormat.currency(symbol: '₹').format(amount),
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          if (showIncomeSource && incomeSource != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              incomeSource,
-              style: TextStyle(
-                fontSize: 10,
-                color: color.withValues(alpha: 0.7),
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-          if (showRemainingStatus) ...[
-            const SizedBox(height: 4),
-            Text(
-              isOverIncome ? 'Over Income' : 'Within Income',
-              style: TextStyle(
-                fontSize: 10,
-                color: isOverIncome ? Colors.red : Colors.green,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-          if (showSetButton)
-            TextButton(
-              onPressed: onTap,
-              style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.primary,
-              ),
-              child: const Text('SET BUDGET'),
-            ),
-        ],
-      ),
-    );
-  }
-
-  void _showSetOverallBudgetDialog() {
-    final amountController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Set Overall Budget for ${DateFormat('MMMM yyyy').format(_selectedMonthNotifier.value)}',
-        ),
-        content: TextField(
-          controller: amountController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Overall Budget Amount',
-            hintText: '0.00',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (amountController.text.isNotEmpty) {
-                final currentContext = context;
-                final navigator = Navigator.of(currentContext);
-                final overallBudget = OverallBudget(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  limit: double.tryParse(amountController.text) ?? 0,
-                  startDate: DateTime(
-                    _selectedMonthNotifier.value.year,
-                    _selectedMonthNotifier.value.month,
-                    1,
-                  ),
-                  endDate: DateTime(
-                    _selectedMonthNotifier.value.year,
-                    _selectedMonthNotifier.value.month + 1,
-                    0,
-                  ),
-                  isActive: true,
-                );
-                await DataService.addOverallBudget(overallBudget);
-                if (mounted) {
-                  navigator.pop();
-                  await _loadData();
-                }
-              }
-            },
-            child: const Text('Set Overall Budget'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditOverallBudgetDialog() {
-    final amountController = TextEditingController(
-      text: _overallBudgetLimitNotifier.value.toString(),
-    );
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Edit Overall Budget for ${DateFormat('MMMM yyyy').format(_selectedMonthNotifier.value)}',
-        ),
-        content: TextField(
-          controller: amountController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Overall Budget Amount',
-            hintText: '0.00',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (amountController.text.isNotEmpty) {
-                final currentContext = context;
-                final navigator = Navigator.of(currentContext);
-                final updatedOverallBudget = OverallBudget(
-                  id: _overallBudgetsNotifier.value
-                      .firstWhere(
-                        (b) =>
-                            b.startDate.year ==
-                                _selectedMonthNotifier.value.year &&
-                            b.startDate.month ==
-                                _selectedMonthNotifier.value.month &&
-                            b.isActive,
-                        orElse: () => OverallBudget(
-                          id: '',
-                          limit: 0,
-                          startDate: DateTime.now(),
-                          endDate: DateTime.now(),
-                          isActive: true,
-                        ),
-                      )
-                      .id,
-                  limit: double.tryParse(amountController.text) ?? 0,
-                  startDate: DateTime(
-                    _selectedMonthNotifier.value.year,
-                    _selectedMonthNotifier.value.month,
-                    1,
-                  ),
-                  endDate: DateTime(
-                    _selectedMonthNotifier.value.year,
-                    _selectedMonthNotifier.value.month + 1,
-                    0,
-                  ),
-                  isActive: true,
-                );
-                await DataService.updateOverallBudget(updatedOverallBudget);
-                if (mounted) {
-                  navigator.pop();
-                  setState(() {});
-                  await _loadData();
-                }
-              }
-            },
-            child: const Text('Update Overall Budget'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBudgetSummarySection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Budget Summary',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Colors.purple,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _buildBudgetSummaryCard(
-                'Overall Budget',
-                _overallBudgetLimitNotifier.value,
-                Colors.green,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildBudgetSummaryCard(
-                'Total Spent',
-                _totalSpentNotifier.value,
-                Colors.red,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBudgetSummaryCard(String title, double amount, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 12,
-              color: color,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            NumberFormat.currency(symbol: '₹').format(amount),
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBudgetInsightsSection() {
-    final effectiveTotalBudget = _overallBudgetLimitNotifier.value > 0
-        ? _overallBudgetLimitNotifier.value
-        : _totalBudgetNotifier.value;
-
-    final budgetUtilization = effectiveTotalBudget > 0
-        ? (_totalSpentNotifier.value / effectiveTotalBudget * 100).clamp(0, 100)
-        : 0.0;
-
-    final remainingBudget = effectiveTotalBudget - _totalSpentNotifier.value;
-    final isOverBudget = _totalSpentNotifier.value > effectiveTotalBudget;
-
-    final remainingIncome =
-        _effectiveIncomeNotifier.value - _totalSpentNotifier.value;
-    final isOverIncome =
-        _totalSpentNotifier.value > _effectiveIncomeNotifier.value;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Budget Insights',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildInsightCard(
-                'Budget Utilization',
-                '${budgetUtilization.toStringAsFixed(1)}%',
-                budgetUtilization > 90 ? Colors.red : Colors.green,
-                Icons.pie_chart,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildInsightCard(
-                'Remaining Budget',
-                NumberFormat.currency(symbol: '₹').format(remainingBudget),
-                remainingBudget < 0 ? Colors.red : Colors.green,
-                Icons.account_balance_wallet,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildInsightCard(
-                'Monthly Income',
-                NumberFormat.currency(
-                  symbol: '₹',
-                ).format(_effectiveIncomeNotifier.value),
-                Colors.green,
-                Icons.attach_money,
-                subtitle: _salaryIncomeNotifier.value > 0
-                    ? 'Salary'
-                    : 'All Income',
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildInsightCard(
-                'Income Status',
-                isOverIncome ? 'Over Income' : 'Within Income',
-                isOverIncome ? Colors.red : Colors.green,
-                isOverIncome ? Icons.warning : Icons.check_circle,
-                subtitle: isOverIncome
-                    ? 'Deficit: ${NumberFormat.currency(symbol: '₹').format(remainingIncome.abs())}'
-                    : 'Remaining: ${NumberFormat.currency(symbol: '₹').format(remainingIncome)}',
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isOverBudget
-                ? Colors.red.withValues(alpha: 0.1)
-                : Colors.green.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isOverBudget ? Colors.red : Colors.green,
-              width: 1,
-            ),
-          ),
-          child: Row(
+          Row(
             children: [
-              Icon(
-                isOverBudget ? Icons.warning : Icons.check_circle,
-                color: isOverBudget ? Colors.red : Colors.green,
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: context.cSurface,
+                  borderRadius: BorderRadius.circular(AppRadius.r8),
+                ),
+                child: Center(
+                  child: Text(_emoji(budget.category),
+                      style: const TextStyle(fontSize: 16)),
+                ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.s10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      isOverBudget
-                          ? 'You are over budget by ${NumberFormat.currency(symbol: '₹').format(remainingBudget.abs())}'
-                          : 'You are within budget with ${NumberFormat.currency(symbol: '₹').format(remainingBudget)} remaining',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: isOverBudget ? Colors.red : Colors.green,
-                      ),
-                    ),
-                    if (isOverIncome) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        '⚠️ Your expenses exceed your income by ${NumberFormat.currency(symbol: '₹').format(remainingIncome.abs())}. You might be using your savings.',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.orange,
-                        ),
-                      ),
-                    ],
+                    Text(budget.name,
+                        style: AppText.cardTitleStyle(context.cInk),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    Text(budget.category,
+                        style: AppText.monoCaption(context.cInk3)),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInsightCard(
-    String title,
-    String value,
-    Color color,
-    IconData icon, {
-    String? subtitle,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 10,
-                color: color.withValues(alpha: 0.7),
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCategoriesWithBudgetsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Income Categories
-        Text(
-          'Income Categories',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Colors.green,
-          ),
-        ),
-        const SizedBox(height: 8),
-        ..._incomeCategories.map(
-          (category) => _buildCategoryWithBudgetCard(category, 'income'),
-        ),
-
-        const SizedBox(height: 16),
-
-        // Expense Categories
-        Text(
-          'Expense Categories',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Colors.red,
-          ),
-        ),
-        const SizedBox(height: 8),
-        ..._expenseCategories.map(
-          (category) => _buildCategoryWithBudgetCard(category, 'expense'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCategoryWithBudgetCard(
-    Map<String, dynamic> category,
-    String type,
-  ) {
-    final categoryName = category['name'] as String;
-    final icon = category['icon'] as IconData;
-    final color = category['color'] as Color;
-
-    // For income categories, just show the income amount
-    if (type == 'income') {
-      final income = _transactionsNotifier.value
-          .where(
-            (t) =>
-                t.type == 'income' &&
-                t.category == categoryName &&
-                t.date.year == _selectedMonthNotifier.value.year &&
-                t.date.month == _selectedMonthNotifier.value.month,
-          )
-          .fold(0.0, (sum, item) => sum + item.amount);
-
-      return Card(
-        margin: const EdgeInsets.only(bottom: 8),
-        child: ListTile(
-          leading: CircleAvatar(
-            backgroundColor: color.withValues(alpha: 0.2),
-            child: Icon(icon, color: color),
-          ),
-          title: Text(categoryName),
-          subtitle: Text(
-            income > 0 
-                ? NumberFormat.currency(symbol: '₹').format(income)
-                : 'No income recorded',
-          ),
-          trailing: Text(
-            income > 0 ? 'Income' : 'No Data',
-            style: TextStyle(
-              color: income > 0 ? Colors.green : Colors.grey,
-              fontWeight: FontWeight.w500,
-              fontSize: 12,
-            ),
-          ),
-        ),
-      );
-    }
-
-    // For expense categories, show budget functionality
-    final budget = _budgetsNotifier.value.firstWhere(
-      (b) =>
-          b.category == categoryName &&
-          b.startDate.year == _selectedMonthNotifier.value.year &&
-          b.startDate.month == _selectedMonthNotifier.value.month,
-      orElse: () => Budget(
-        id: '',
-        name: '',
-        category: categoryName,
-        limit: 0,
-        startDate: _selectedMonthNotifier.value,
-        endDate: _selectedMonthNotifier.value,
-      ),
-    );
-
-    // Calculate spent amount for this category
-    final spent = _transactionsNotifier.value
-        .where(
-          (t) =>
-              t.type == type &&
-              t.category == categoryName &&
-              t.date.year == _selectedMonthNotifier.value.year &&
-              t.date.month == _selectedMonthNotifier.value.month,
-        )
-        .fold(0.0, (sum, item) => sum + item.amount);
-
-    // Only show budget information if there's actually a budget set
-    final hasBudget = budget.limit > 0;
-    final percentage = hasBudget ? (spent / budget.limit) * 100 : 0.0;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.2),
-          child: Icon(icon, color: color),
-        ),
-        title: Text(categoryName),
-        subtitle: hasBudget
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '${NumberFormat.currency(symbol: '₹').format(spent)} / ${NumberFormat.currency(symbol: '₹').format(budget.limit)}',
+                    '${fmt(spent, currency)} / ${fmt(budget.limit, currency)}',
+                    style: AppText.mono(AppText.tinier, AppText.medium, context.cInk2),
                   ),
-                  const SizedBox(height: 4),
-                  LinearProgressIndicator(
-                    value: percentage / 100,
-                    backgroundColor: Theme.of(
-                      context,
-                    ).colorScheme.surfaceContainerHighest,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      percentage > 90 ? Colors.red : color,
-                    ),
-                  ),
-                ],
-              )
-            : const Text('No budget set'),
-        trailing: hasBudget
-            ? Text(
-                '${percentage.toStringAsFixed(1)}%',
-                style: TextStyle(
-                  color: percentage > 90 ? Colors.red : color,
-                  fontWeight: FontWeight.bold,
-                ),
-              )
-            : TextButton(
-                onPressed: () => _showSetBudgetDialog(categoryName),
-                style: TextButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.primary,
-                ),
-                child: const Text('SET BUDGET'),
-              ),
-        onTap: hasBudget ? () => _showEditBudgetDialog(budget) : null,
-      ),
-    );
-  }
-
-  void _showAddCategoryDialog() {
-    final nameController = TextEditingController();
-    String selectedType = 'expense';
-    String? selectedIcon;
-    String selectedColor = '#2196F3';
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Add New Category'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Category Name',
-                  hintText: 'e.g., Groceries, Travel',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: selectedType,
-                decoration: const InputDecoration(
-                  labelText: 'Category Type',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'income', child: Text('Income')),
-                  DropdownMenuItem(value: 'expense', child: Text('Expense')),
-                  DropdownMenuItem(value: 'transfer', child: Text('Transfer')),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    selectedType = value!;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (context) => common_widgets.IconPicker(
-                            selectedIcon: selectedIcon,
-                            onIconSelected: (icon) {
-                              setState(() {
-                                selectedIcon = icon;
-                              });
-                            },
-                            title: 'Select Category Icon',
-                          ),
-                        );
-                      },
-                      icon: Icon(
-                        selectedIcon != null
-                            ? CategoryService.getIconData(selectedIcon!)
-                            : Icons.category,
-                      ),
-                      label: Text(selectedIcon ?? 'Select Icon'),
-                    ),
+                  const SizedBox(height: 2),
+                  Text(
+                    over ? 'Over ${fmt(-left, currency)}' : '${fmt(left, currency)} left',
+                    style: AppText.mono(AppText.tinier, AppText.regular,
+                        over ? AppColors.danger : context.cInk3),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              const Text('Select Color:'),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: [
-                  _buildColorOption('#FF0000', selectedColor, (color) {
-                    setState(() {
-                      selectedColor = color;
-                    });
-                  }),
-                  _buildColorOption('#FF9800', selectedColor, (color) {
-                    setState(() {
-                      selectedColor = color;
-                    });
-                  }),
-                  _buildColorOption('#FFEB3B', selectedColor, (color) {
-                    setState(() {
-                      selectedColor = color;
-                    });
-                  }),
-                  _buildColorOption('#4CAF50', selectedColor, (color) {
-                    setState(() {
-                      selectedColor = color;
-                    });
-                  }),
-                  _buildColorOption('#2196F3', selectedColor, (color) {
-                    setState(() {
-                      selectedColor = color;
-                    });
-                  }),
-                  _buildColorOption('#9C27B0', selectedColor, (color) {
-                    setState(() {
-                      selectedColor = color;
-                    });
-                  }),
-                  _buildColorOption('#E91E63', selectedColor, (color) {
-                    setState(() {
-                      selectedColor = color;
-                    });
-                  }),
-                  _buildColorOption('#607D8B', selectedColor, (color) {
-                    setState(() {
-                      selectedColor = color;
-                    });
-                  }),
-                ],
+              const SizedBox(width: AppSpacing.s4),
+              GestureDetector(
+                onTap: () => _showOptions(context),
+                child: Icon(Icons.more_vert, size: 18, color: context.cInk3),
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (nameController.text.isNotEmpty && selectedIcon != null) {
-                  final dialogNavigator = Navigator.of(dialogContext);
-                  final newCategory = Category(
-                    id: const Uuid().v4(),
-                    name: nameController.text,
-                    type: selectedType,
-                    icon: selectedIcon!,
-                    color: selectedColor,
-                    createdAt: DateTime.now(),
-                  );
-
-                  final success = await CategoryService.addCategory(
-                    newCategory,
-                  );
-                  if (success && mounted) {
-                    dialogNavigator.pop();
-                    // Refresh the screen to show new category
-                    await _loadData();
-                  }
-                }
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        ),
+          const SizedBox(height: AppSpacing.s10),
+          AppProgressBar(value: pct, color: barColor),
+        ],
       ),
     );
   }
 
-  Widget _buildColorOption(
-    String colorHex,
-    String selectedColor,
-    Function(String) onTap,
-  ) {
-    final color = CategoryService.getColorFromHex(colorHex);
-    final isSelected = selectedColor == colorHex;
-
-    return GestureDetector(
-      onTap: () => onTap(colorHex),
-      child: Container(
-        width: 40,
-        height: 40,
+  void _showOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
         decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(8),
-          border: isSelected ? Border.all(color: Colors.black, width: 2) : null,
+          color: context.cCard,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppRadius.r16),
+          ),
+          border: Border.all(color: context.cBorder, width: 1),
         ),
-        child: isSelected
-            ? const Icon(Icons.check, color: Colors.white, size: 20)
-            : null,
-      ),
-    );
-  }
-
-  void _showSetBudgetDialog(String categoryName) {
-    final amountController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Set Budget for $categoryName'),
-        content: TextField(
-          controller: amountController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Budget Amount',
-            hintText: '0.00',
-          ),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.s20, AppSpacing.s16, AppSpacing.s20, AppSpacing.s24,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (amountController.text.isNotEmpty) {
-                final currentContext = context;
-                final navigator = Navigator.of(currentContext);
-                final budget = Budget(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  name: '$categoryName Budget',
-                  category: categoryName,
-                  limit: double.tryParse(amountController.text) ?? 0,
-                  startDate: DateTime(
-                    _selectedMonthNotifier.value.year,
-                    _selectedMonthNotifier.value.month,
-                    1,
-                  ),
-                  endDate: DateTime(
-                    _selectedMonthNotifier.value.year,
-                    _selectedMonthNotifier.value.month + 1,
-                    0,
-                  ),
-                );
-                await DataService.addBudget(budget);
-                if (mounted) {
-                  navigator.pop();
-                  await _loadData();
-                }
-              }
-            },
-            child: const Text('Set Budget'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditBudgetDialog(Budget budget) {
-    final amountController = TextEditingController(
-      text: budget.limit.toString(),
-    );
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Edit Budget for ${budget.category}'),
-        content: TextField(
-          controller: amountController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Budget Amount',
-            hintText: '0.00',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (amountController.text.isNotEmpty) {
-                final currentContext = context;
-                final navigator = Navigator.of(currentContext);
-                final updatedBudget = budget.copyWith(
-                  limit: double.tryParse(amountController.text) ?? 0,
-                );
-                await DataService.updateBudget(updatedBudget);
-                if (mounted) {
-                  navigator.pop();
-                  setState(() {});
-                  await _loadData();
-                }
-              }
-            },
-            child: const Text('Update'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBudgetAlertsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Budget Alerts',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            FutureBuilder<int>(
-              future: WarningPreferencesService.getHiddenWarningsCount(),
-              builder: (context, snapshot) {
-                if (snapshot.hasData && snapshot.data! > 0) {
-                  return TextButton.icon(
-                    onPressed: _showHiddenWarningsDialog,
-                    icon: const Icon(Icons.visibility_off, size: 16),
-                    label: Text('${snapshot.data} Hidden'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.grey[600],
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        FutureBuilder<List<Map<String, dynamic>>>(
-          future: _getFilteredAlerts(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            final alerts = snapshot.data ?? [];
-
-            if (alerts.isEmpty) {
-              return Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green, width: 1),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green),
-                    SizedBox(width: 12),
-                    Text(
-                      'All good! No budget alerts for this month.',
-                      style: TextStyle(
-                        color: Colors.green,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            return Column(
-              children: alerts.map((alert) => _buildAlertCard(alert)).toList(),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Future<List<Map<String, dynamic>>> _getFilteredAlerts() async {
-    final alerts = await BudgetService.getBudgetAlerts();
-    final filteredAlerts = <Map<String, dynamic>>[];
-
-    for (final alert in alerts) {
-      final isHidden = await WarningPreferencesService.isWarningHidden(
-        alert['type'],
-        alert['category'],
-      );
-
-      if (!isHidden) {
-        filteredAlerts.add(alert);
-      }
-    }
-
-    return filteredAlerts;
-  }
-
-  Widget _buildAlertCard(Map<String, dynamic> alert) {
-    final priority = alert['priority'] ?? 'medium';
-
-    Color priorityColor;
-    IconData priorityIcon;
-
-    switch (priority) {
-      case 'high':
-        priorityColor = Colors.red;
-        priorityIcon = Icons.priority_high;
-        break;
-      case 'medium':
-        priorityColor = Colors.orange;
-        priorityIcon = Icons.info;
-        break;
-      case 'low':
-        priorityColor = Colors.blue;
-        priorityIcon = Icons.lightbulb;
-        break;
-      default:
-        priorityColor = Colors.grey;
-        priorityIcon = Icons.info;
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: priorityColor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: priorityColor, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(priorityIcon, color: priorityColor, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  alert['title'],
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: priorityColor,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              if (alert['canHide'] == true)
-                IconButton(
-                  onPressed: () => _hideWarning(alert),
-                  icon: const Icon(Icons.close, size: 16),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 24,
-                    minHeight: 24,
-                  ),
-                  color: priorityColor,
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(alert['message'], style: const TextStyle(fontSize: 12)),
-          if (alert['priority'] != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: priorityColor.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    priority.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: priorityColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                if (alert['resetMonthly'] == true) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      'RESETS MONTHLY',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.blue,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  void _hideWarning(Map<String, dynamic> alert) async {
-    await WarningPreferencesService.hideWarning(
-      alert['type'],
-      alert['category'],
-    );
-
-    // Refresh the alerts
-    setState(() {});
-  }
-
-  void _showHiddenWarningsDialog() async {
-    final hiddenWarnings = await WarningPreferencesService.getHiddenWarnings();
-    final stats = await WarningPreferencesService.getWarningStatistics();
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Hidden Warnings'),
-        content: Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Total Hidden: ${stats['totalHidden']}'),
-            Text('Monthly (Auto-reset): ${stats['monthlyHidden']}'),
-            Text('Permanent: ${stats['permanentHidden']}'),
-            const SizedBox(height: 16),
-            if (hiddenWarnings.isNotEmpty) ...[
-              const Text(
-                'Hidden Warnings:',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              ...hiddenWarnings.values.map(
-                (warning) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    '• ${warning['type']}${warning['category'] != null ? ' (${warning['category']})' : ''}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
+            Center(
+              child: Container(
+                width: 36, height: 3,
+                decoration: BoxDecoration(
+                  color: context.cBorder,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-            ],
+            ),
+            const SizedBox(height: AppSpacing.s14),
+            Text(budget.name, style: AppText.title(context.cInk)),
+            const SizedBox(height: AppSpacing.s16),
+            _OptionRow(
+              icon: Icons.edit_outlined,
+              label: 'Edit Budget',
+              onTap: () { Navigator.pop(context); onEdit(); },
+            ),
+            _OptionRow(
+              icon: Icons.delete_outline,
+              label: 'Delete Budget',
+              danger: true,
+              onTap: () { Navigator.pop(context); onDelete(); },
+            ),
+            const SizedBox(height: AppSpacing.s8),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final dialogNavigator = Navigator.of(dialogContext);
-              await WarningPreferencesService.clearAllHiddenWarnings();
-              if (mounted) {
-                dialogNavigator.pop();
-                setState(() {});
-              }
-            },
-            child: const Text('Clear All'),
-          ),
-        ],
       ),
     );
   }
+}
 
-  Widget _buildBudgetRecommendationsSection() {
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+class _NavArrow extends StatelessWidget {
+  const _NavArrow({
+    required this.icon,
+    required this.onTap,
+    this.disabled = false,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool disabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: disabled ? null : onTap,
+      child: Container(
+        width: 30, height: 30,
+        decoration: BoxDecoration(
+          color: context.cSurface,
+          borderRadius: BorderRadius.circular(AppRadius.r8),
+          border: Border.all(color: context.cBorder, width: 1),
+        ),
+        child: Icon(
+          icon,
+          size: 16,
+          color: disabled ? context.cInk3 : context.cInk2,
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetField extends StatelessWidget {
+  const _SheetField({
+    required this.controller,
+    required this.hint,
+    required this.label,
+    this.keyboardType,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final String label;
+  final TextInputType? keyboardType;
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Budget Recommendations',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        ..._budgetRecommendationsNotifier.value.map(
-          (recommendation) => Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.blue.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue, width: 1),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.lightbulb, color: Colors.blue),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        recommendation['message'],
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-                if (recommendation['suggestedAmount'] != null) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Suggested Amount:',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        NumberFormat.currency(
-                          symbol: '₹',
-                        ).format(recommendation['suggestedAmount']),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                if (recommendation['type'] == 'set_overall_budget') ...[
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _showSetOverallBudgetDialog();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
-                      child: const Text('Set Overall Budget'),
-                    ),
-                  ),
-                ],
-              ],
+        LabelText(label),
+        const SizedBox(height: AppSpacing.s6),
+        Container(
+          decoration: BoxDecoration(
+            color: context.cSurface,
+            borderRadius: BorderRadius.circular(AppRadius.r10),
+            border: Border.all(color: context.cBorder, width: 1),
+          ),
+          child: TextField(
+            controller: controller,
+            keyboardType: keyboardType,
+            style: AppText.bodyStyle(context.cInk),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: AppText.bodyStyle(context.cInk3),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.s12, vertical: AppSpacing.s10,
+              ),
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _OptionRow extends StatelessWidget {
+  const _OptionRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? AppColors.danger : context.cInk;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.s12),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: AppSpacing.s12),
+            Text(label, style: AppText.bodyStyle(color)),
+          ],
+        ),
+      ),
     );
   }
 }

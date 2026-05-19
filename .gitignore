@@ -63,3 +63,5 @@ GoogleService-Info.plist
 
 # Document sorter design prototype (separate project)
 /document-sorter/
+
+/app_images

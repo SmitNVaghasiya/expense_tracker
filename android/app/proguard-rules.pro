@@ -27,3 +27,7 @@
 
 # Don't warn about optional deps
 -dontwarn org.conscrypt.**
+
+# Flutter uses Play Core for deferred components — not used in this app, suppress missing class errors
+-dontwarn com.google.android.play.core.**
+-keep class com.google.android.play.core.** { *; }
